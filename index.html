@@ -1,0 +1,214 @@
+﻿<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Silsilah Keluarga</title>
+<meta name="theme-color" content="#14532d">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11.14.5/dist/sweetalert2.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f6f7f4;--card:#fff;--ink:#1c2420;--mute:#6b766f;--line:#a9b8ad;--brand:#14532d;--L:#dbeafe;--P:#fce7f3;--bd:#e2e6e0}
+@media(prefers-color-scheme:dark){:root{--bg:#101512;--card:#1a211d;--ink:#e8eee9;--mute:#97a39b;--line:#3f5246;--brand:#4ade80;--L:#1e3a5f;--P:#5b2146;--bd:#2a342e}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Inter,system-ui,sans-serif;padding-top:env(safe-area-inset-top)}
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--bd);padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+h1{font:700 22px Fraunces,serif;margin:0;flex:1;min-width:150px}
+h1 small{display:block;font:400 12px Inter;color:var(--mute)}
+.tabs{display:flex;background:var(--card);border:1px solid var(--bd);border-radius:10px;overflow:hidden}
+.tabs button{border:0;background:none;color:var(--mute);padding:8px 14px;font:500 14px Inter;cursor:pointer}
+.tabs button.on{background:var(--brand);color:var(--bg)}
+.btn{border:0;background:var(--brand);color:var(--bg);padding:9px 16px;border-radius:10px;font:600 14px Inter;cursor:pointer}
+.btn.o{background:none;color:var(--ink);border:1px solid var(--bd)}
+.btn.r{background:#b91c1c;color:#fff}
+button:focus-visible,input:focus-visible,.c:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+main{padding:16px;padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+.scroll{overflow-x:auto;padding-bottom:16px}
+.tree{display:inline-block;min-width:100%;text-align:center}
+.tree ul{display:flex;justify-content:center;padding:20px 0 0;margin:0;position:relative}
+.tree>ul{padding-top:0}
+.tree li{list-style:none;text-align:center;position:relative;padding:20px 6px 0}
+.tree>ul>li{padding-top:0}
+.tree li::before,.tree li::after{content:"";position:absolute;top:0;right:50%;border-top:2px solid var(--line);width:50%;height:20px}
+.tree li::after{right:auto;left:50%;border-left:2px solid var(--line)}
+.tree li:only-child::before,.tree li:only-child::after{display:none}
+.tree li:only-child{padding-top:20px}
+.tree li:first-child::before,.tree li:last-child::after{border:0}
+.tree li:last-child::before{border-right:2px solid var(--line);border-radius:0 8px 0 0}
+.tree li:first-child::after{border-radius:8px 0 0 0}
+.tree ul ul::before{content:"";position:absolute;top:0;left:50%;border-left:2px solid var(--line);height:20px}
+.cp{display:inline-flex;align-items:center;gap:4px}
+.h{color:#e11d48;font-size:14px}
+.c{width:132px;background:var(--card);border:1px solid var(--bd);border-top:4px solid;border-radius:12px;padding:10px 8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center}
+.c.L{border-top-color:#3b82f6}.c.P{border-top-color:#ec4899}
+.c .av{width:52px;height:52px;border-radius:50%;object-fit:cover;background:var(--L);display:grid;place-items:center;font-size:22px;margin-bottom:4px}
+.c.P .av{background:var(--P)}
+.c b{font:600 13px/1.25 Inter;word-break:break-word}
+.c small{color:var(--mute);font-size:11px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;justify-items:center}
+.grid .c{width:100%}
+input.q{width:100%;max-width:420px;margin-bottom:16px;padding:10px 14px;border-radius:10px;border:1px solid var(--bd);background:var(--card);color:var(--ink);font:inherit}
+.empty{text-align:center;padding:60px 16px;color:var(--mute)}
+.f{display:grid;grid-template-columns:1fr 1fr;gap:8px;text-align:left}
+.f .w{grid-column:1/-1}
+.f label{font-size:12px;color:var(--mute);display:block;margin-bottom:2px}
+.f input,.f select,.f textarea{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font:inherit;background:#fff;color:#111}
+.acts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
+.swal2-popup{font-family:Inter,system-ui,sans-serif}
+</style>
+</head>
+<body>
+<header>
+  <h1>Silsilah Keluarga<small id="stat"></small></h1>
+  <div class="tabs" role="tablist"><button id="t1" class="on" onclick="view('tree')">Pohon</button><button id="t2" onclick="view('list')">Daftar</button></div>
+  <button class="btn" onclick="form()">+ Anggota</button>
+</header>
+<main><div id="app"></div></main>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.14.5/dist/sweetalert2.all.min.js"></script>
+<script>
+/* ====== KONFIGURASI: tempel URL Web App Apps Script Anda ====== */
+const API = 'https://script.google.com/macros/s/AKfycbwdXXy7picB62ke1G5fUpj687NFj-Xy5G419Hru2YjZUWYd1i3aCw7ZLI3ItfaJa2Uy/exec';
+/* ============================================================== */
+
+let D = [], V = 'tree', KEY = '';
+const $ = s => document.querySelector(s);
+const by = id => D.find(p => p.id === id);
+const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const toast = (icon, title) => Swal.fire({toast:true, position:'top-end', icon, title, showConfirmButton:false, timer:2600, timerProgressBar:true});
+const busy = t => Swal.fire({title:t, allowOutsideClick:false, showConfirmButton:false, didOpen:() => Swal.showLoading()});
+
+async function load(silent) {
+  if (API.startsWith('GANTI')) return Swal.fire('Belum dikonfigurasi', 'Isi konstanta API di index.html dengan URL Web App Apps Script.', 'warning');
+  if (!silent) busy('Memuat data…');
+  try {
+    const r = await (await fetch(API)).json();
+    D = r.data || [];
+    render();
+    if (!silent) Swal.close();
+  } catch (e) {
+    Swal.fire('Gagal memuat', 'Periksa koneksi atau URL Web App (akses harus "Siapa saja").', 'error');
+  }
+}
+
+async function needKey() {
+  if (KEY) return true;
+  const { value } = await Swal.fire({title:'Kunci admin', text:'Masukkan kunci untuk mengubah data.', input:'password', showCancelButton:true, confirmButtonText:'Lanjut', cancelButtonText:'Batal'});
+  if (!value) return false;
+  KEY = value; return true;
+}
+
+async function api(action, person) {
+  const r = await (await fetch(API, {method:'POST', body:JSON.stringify({action, key:KEY, person})})).json();
+  if (!r.ok) { if (/Kunci/.test(r.msg)) KEY = ''; throw new Error(r.msg); }
+  return r;
+}
+
+/* ---------- Tampilan ---------- */
+function card(p) {
+  const y = [p.lahir, p.wafat].filter(Boolean).join(' – ');
+  const av = p.foto ? `<img class="av" src="${esc(p.foto)}" alt="" onerror="this.outerHTML='<div class=&quot;av&quot;>${p.gender === 'P' ? '♀' : '♂'}</div>'">` : `<div class="av">${p.gender === 'P' ? '♀' : '♂'}</div>`;
+  return `<div class="c ${p.gender}" tabindex="0" role="button" onclick="detail('${p.id}')" onkeydown="if(event.key==='Enter')detail('${p.id}')">${av}<b>${esc(p.nama)}</b><small>${esc(y)}</small></div>`;
+}
+
+function node(p, seen) {
+  seen.add(p.id);
+  const s = p.pasangan_id && by(p.pasangan_id);
+  if (s) seen.add(s.id);
+  const ids = [p.id, s && s.id].filter(Boolean);
+  const kids = D.filter(k => (ids.includes(k.ayah_id) || ids.includes(k.ibu_id)) && !seen.has(k.id));
+  return `<li><div class="cp">${card(p)}${s ? '<span class="h">♥</span>' + card(s) : ''}</div>${kids.length ? '<ul>' + kids.map(k => node(k, seen)).join('') + '</ul>' : ''}</li>`;
+}
+
+function render() {
+  $('#stat').textContent = D.length + ' anggota';
+  const app = $('#app');
+  if (!D.length) { app.innerHTML = '<div class="empty"><p>Belum ada anggota keluarga.</p><button class="btn" onclick="form()">Tambah anggota pertama</button></div>'; return; }
+  if (V === 'tree') {
+    const seen = new Set();
+    const roots = D.filter(p => { const s = p.pasangan_id && by(p.pasangan_id); return !p.ayah_id && !p.ibu_id && !(s && (s.ayah_id || s.ibu_id)); });
+    app.innerHTML = '<div class="scroll"><div class="tree"><ul>' + roots.map(r => seen.has(r.id) ? '' : node(r, seen)).join('') + '</ul></div></div>';
+  } else {
+    app.innerHTML = '<input class="q" id="q" type="search" placeholder="Cari nama…" oninput="renderList()"><div class="grid" id="gl"></div>';
+    renderList();
+  }
+}
+function renderList() {
+  const q = ($('#q').value || '').toLowerCase();
+  const l = D.filter(p => p.nama.toLowerCase().includes(q)).sort((a, b) => a.nama.localeCompare(b.nama));
+  $('#gl').innerHTML = l.length ? l.map(card).join('') : '<div class="empty w">Tidak ada nama yang cocok.</div>';
+}
+function view(v) { V = v; $('#t1').classList.toggle('on', v === 'tree'); $('#t2').classList.toggle('on', v === 'list'); render(); }
+
+/* ---------- Detail ---------- */
+function detail(id) {
+  const p = by(id), f = by(p.ayah_id), m = by(p.ibu_id), s = by(p.pasangan_id);
+  const anak = D.filter(k => k.ayah_id === id || k.ibu_id === id);
+  const row = (a, b) => b ? `<p style="margin:4px 0"><span style="color:var(--mute)">${a}:</span> ${esc(b)}</p>` : '';
+  Swal.fire({
+    title: esc(p.nama), showConfirmButton: false, showCloseButton: true,
+    html: `<div style="text-align:left">${row('Jenis kelamin', p.gender === 'P' ? 'Perempuan' : 'Laki-laki')}${row('Lahir', p.lahir)}${row('Wafat', p.wafat)}${row('Ayah', f && f.nama)}${row('Ibu', m && m.nama)}${row('Pasangan', s && s.nama)}${row('Anak', anak.map(k => k.nama).join(', '))}${row('Catatan', p.catatan)}</div>
+    <div class="acts"><button class="btn" onclick="Swal.close();edit('${id}')">Ubah</button><button class="btn o" onclick="Swal.close();addChild('${id}')">Tambah anak</button><button class="btn r" onclick="Swal.close();del('${id}')">Hapus</button></div>`
+  });
+}
+const edit = id => form(by(id));
+function addChild(id) {
+  const p = by(id), s = by(p.pasangan_id);
+  const f = p.gender === 'L' ? p : s, m = p.gender === 'P' ? p : s;
+  form({ayah_id: f ? f.id : '', ibu_id: m ? m.id : ''}, true);
+}
+
+/* ---------- Form ---------- */
+const opt = (sel, list) => '<option value="">—</option>' + list.map(p => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(p.nama)}</option>`).join('');
+
+async function form(p = {}) {
+  const others = D.filter(x => x.id !== p.id);
+  const { value: v } = await Swal.fire({
+    title: p.id ? 'Ubah anggota' : 'Tambah anggota', width: 560, showCancelButton: true, confirmButtonText: 'Simpan', cancelButtonText: 'Batal', focusConfirm: false,
+    html: `<div class="f">
+      <div class="w"><label>Nama lengkap *</label><input id="n" value="${esc(p.nama)}"></div>
+      <div><label>Jenis kelamin</label><select id="g"><option value="L" ${p.gender !== 'P' ? 'selected' : ''}>Laki-laki</option><option value="P" ${p.gender === 'P' ? 'selected' : ''}>Perempuan</option></select></div>
+      <div><label>Foto (URL gambar)</label><input id="fo" value="${esc(p.foto)}" placeholder="https://…"></div>
+      <div><label>Lahir</label><input id="l" value="${esc(p.lahir)}" placeholder="1950 atau 1950-05-17"></div>
+      <div><label>Wafat</label><input id="w" value="${esc(p.wafat)}" placeholder="kosongkan jika hidup"></div>
+      <div><label>Ayah</label><select id="a">${opt(p.ayah_id, others.filter(x => x.gender === 'L'))}</select></div>
+      <div><label>Ibu</label><select id="i">${opt(p.ibu_id, others.filter(x => x.gender === 'P'))}</select></div>
+      <div class="w"><label>Pasangan</label><select id="s">${opt(p.pasangan_id, others)}</select></div>
+      <div class="w"><label>Catatan</label><textarea id="c" rows="2">${esc(p.catatan)}</textarea></div></div>`,
+    preConfirm: () => {
+      const g = id => document.getElementById(id).value.trim();
+      if (!g('n')) { Swal.showValidationMessage('Nama wajib diisi'); return false; }
+      return {nama:g('n'), gender:g('g'), foto:g('fo'), lahir:g('l'), wafat:g('w'), ayah_id:g('a'), ibu_id:g('i'), pasangan_id:g('s'), catatan:g('c')};
+    }
+  });
+  if (!v) return;
+  if (!(await needKey())) return;
+  if (p.id) v.id = p.id;
+  busy('Menyimpan…');
+  try {
+    const r = await api(p.id ? 'update' : 'add', v);
+    const id = p.id || r.id;
+    const s = by(v.pasangan_id);               // sinkronkan pasangan dua arah
+    if (s && s.pasangan_id !== id) await api('update', {...s, pasangan_id: id});
+    const old = p.pasangan_id && p.pasangan_id !== v.pasangan_id && by(p.pasangan_id);
+    if (old && old.pasangan_id === id) await api('update', {...old, pasangan_id: ''});
+    await load(true);
+    Swal.close(); toast('success', 'Data berhasil disimpan');
+  } catch (e) { Swal.fire('Gagal menyimpan', e.message, 'error'); }
+}
+
+async function del(id) {
+  const p = by(id);
+  const ok = await Swal.fire({title:'Hapus anggota?', text:`"${p.nama}" akan dihapus permanen.`, icon:'warning', showCancelButton:true, confirmButtonColor:'#b91c1c', confirmButtonText:'Ya, hapus', cancelButtonText:'Batal'});
+  if (!ok.isConfirmed || !(await needKey())) return;
+  busy('Menghapus…');
+  try { await api('delete', {id}); await load(true); Swal.close(); toast('success', 'Data berhasil dihapus'); }
+  catch (e) { Swal.fire('Gagal menghapus', e.message, 'error'); }
+}
+
+load();
+</script>
+</body>
+</html>

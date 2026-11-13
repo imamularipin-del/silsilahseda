@@ -63,7 +63,7 @@ input.q{width:100%;max-width:420px;margin-bottom:16px;padding:10px 14px;border-r
 <header>
   <h1>Silsilah Keluarga<small id="stat"></small></h1>
   <div class="tabs" role="tablist"><button id="t1" class="on" onclick="view('tree')">Pohon</button><button id="t2" onclick="view('list')">Daftar</button></div>
-  <button class="btn" onclick="form()">+ Anggota</button>
+  <button class="btn" onclick="openForm()">+ Anggota</button>
 </header>
 <main><div id="app"></div></main>
 
@@ -125,7 +125,7 @@ function node(p, seen) {
 function render() {
   $('#stat').textContent = D.length + ' anggota';
   const app = $('#app');
-  if (!D.length) { app.innerHTML = '<div class="empty"><p>Belum ada anggota keluarga.</p><button class="btn" onclick="form()">Tambah anggota pertama</button></div>'; return; }
+  if (!D.length) { app.innerHTML = '<div class="empty"><p>Belum ada anggota keluarga.</p><button class="btn" onclick="openForm()">Tambah anggota pertama</button></div>'; return; }
   if (V === 'tree') {
     const seen = new Set();
     const roots = D.filter(p => { const s = p.pasangan_id && by(p.pasangan_id); return !p.ayah_id && !p.ibu_id && !(s && (s.ayah_id || s.ibu_id)); });
@@ -153,17 +153,17 @@ function detail(id) {
     <div class="acts"><button class="btn" onclick="Swal.close();edit('${id}')">Ubah</button><button class="btn o" onclick="Swal.close();addChild('${id}')">Tambah anak</button><button class="btn r" onclick="Swal.close();del('${id}')">Hapus</button></div>`
   });
 }
-const edit = id => form(by(id));
+const edit = id => openForm(by(id));
 function addChild(id) {
   const p = by(id), s = by(p.pasangan_id);
   const f = p.gender === 'L' ? p : s, m = p.gender === 'P' ? p : s;
-  form({ayah_id: f ? f.id : '', ibu_id: m ? m.id : ''}, true);
+  openForm({ayah_id: f ? f.id : '', ibu_id: m ? m.id : ''}, true);
 }
 
 /* ---------- Form ---------- */
 const opt = (sel, list) => '<option value="">—</option>' + list.map(p => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(p.nama)}</option>`).join('');
 
-async function form(p = {}) {
+async function openForm(p = {}) {
   const others = D.filter(x => x.id !== p.id);
   const { value: v } = await Swal.fire({
     title: p.id ? 'Ubah anggota' : 'Tambah anggota', width: 560, showCancelButton: true, confirmButtonText: 'Simpan', cancelButtonText: 'Batal', focusConfirm: false,

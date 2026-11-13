@@ -55,6 +55,7 @@ input.q{width:100%;max-width:420px;margin-bottom:16px;padding:10px 14px;border-r
 .f .w{grid-column:1/-1}
 .f label{font-size:12px;color:var(--mute);display:block;margin-bottom:2px}
 .f input,.f select,.f textarea{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font:inherit;background:#fff;color:#111}
+.chk{max-height:130px;overflow:auto;border:1px solid var(--bd);border-radius:8px;padding:4px 10px;background:#fff}.chk label{display:flex;gap:8px;align-items:center;font-size:14px;color:#111;margin:0;padding:4px 0}.chk input{width:auto}
 .acts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
 .swal2-popup{font-family:Inter,system-ui,sans-serif}
 </style>
@@ -76,6 +77,8 @@ const API = 'https://script.google.com/macros/s/AKfycbwdXXy7picB62ke1G5fUpj687NF
 let D = [], V = 'tree', KEY = '';
 const $ = s => document.querySelector(s);
 const by = id => D.find(p => p.id === id);
+const split = s => String(s || '').split(',').filter(Boolean);
+const spouses = p => { const ids = new Set(split(p.pasangan_id)); D.forEach(x => { if (split(x.pasangan_id).includes(p.id)) ids.add(x.id); }); return [...ids].map(by).filter(Boolean); };
 const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const toast = (icon, title) => Swal.fire({toast:true, position:'top-end', icon, title, showConfirmButton:false, timer:2600, timerProgressBar:true});
 const busy = t => Swal.fire({title:t, allowOutsideClick:false, showConfirmButton:false, didOpen:() => Swal.showLoading()});
@@ -107,19 +110,33 @@ async function api(action, person) {
 }
 
 /* ---------- Tampilan ---------- */
-function card(p) {
+function card(p, note) {
   const y = [p.lahir, p.wafat].filter(Boolean).join(' – ');
   const av = p.foto ? `<img class="av" src="${esc(p.foto)}" alt="" onerror="this.outerHTML='<div class=&quot;av&quot;>${p.gender === 'P' ? '♀' : '♂'}</div>'">` : `<div class="av">${p.gender === 'P' ? '♀' : '♂'}</div>`;
-  return `<div class="c ${p.gender}" tabindex="0" role="button" onclick="detail('${p.id}')" onkeydown="if(event.key==='Enter')detail('${p.id}')">${av}<b>${esc(p.nama)}</b><small>${esc(y)}</small></div>`;
+  return `<div class="c ${p.gender}" tabindex="0" role="button" onclick="detail('${p.id}')" onkeydown="if(event.key==='Enter')detail('${p.id}')">${av}<b>${esc(p.nama)}</b><small>${esc(y)}</small>${note ? `<small><i>${esc(note)}</i></small>` : ''}</div>`;
 }
 
-function node(p, seen) {
-  seen.add(p.id);
-  const s = p.pasangan_id && by(p.pasangan_id);
-  if (s) seen.add(s.id);
-  const ids = [p.id, s && s.id].filter(Boolean);
+function unit(p) {  // semua pasangan yang saling terhubung (suami + beberapa istri)
+  const seen = new Set([p.id]), q = [p];
+  for (let i = 0; i < q.length; i++) for (const s of spouses(q[i])) if (!seen.has(s.id)) { seen.add(s.id); q.push(s); }
+  return q;
+}
+
+function node(p, seen, nt = '') {
+  const comp = unit(p);
+  const head = [...comp].sort((a, b) => spouses(b).length - spouses(a).length || (a.gender === 'L' ? -1 : 1) - (b.gender === 'L' ? -1 : 1))[0];
+  const sp = spouses(head);
+  const order = [head, ...sp, ...comp.filter(x => x !== head && !sp.includes(x))];
+  comp.forEach(x => seen.add(x.id));
+  const ids = comp.map(x => x.id);
   const kids = D.filter(k => (ids.includes(k.ayah_id) || ids.includes(k.ibu_id)) && !seen.has(k.id));
-  return `<li><div class="cp">${card(p)}${s ? '<span class="h">♥</span>' + card(s) : ''}</div>${kids.length ? '<ul>' + kids.map(k => node(k, seen)).join('') + '</ul>' : ''}</li>`;
+  const note = k => {
+    if (comp.length < 3) return '';
+    const o = [k.ayah_id, k.ibu_id].filter(x => x && x !== head.id).map(by).find(x => x && ids.includes(x.id));
+    return o ? 'dari ' + o.nama : '';
+  };
+  const cards = order.map((x, i) => (i ? '<span class="h">♥</span>' : '') + card(x, x.id === p.id ? nt : '')).join('');
+  return `<li><div class="cp">${cards}</div>${kids.length ? '<ul>' + kids.map(k => node(k, seen, note(k))).join('') + '</ul>' : ''}</li>`;
 }
 
 function render() {
@@ -128,7 +145,7 @@ function render() {
   if (!D.length) { app.innerHTML = '<div class="empty"><p>Belum ada anggota keluarga.</p><button class="btn" onclick="openForm()">Tambah anggota pertama</button></div>'; return; }
   if (V === 'tree') {
     const seen = new Set();
-    const roots = D.filter(p => { const s = p.pasangan_id && by(p.pasangan_id); return !p.ayah_id && !p.ibu_id && !(s && (s.ayah_id || s.ibu_id)); });
+    const roots = D.filter(p => !p.ayah_id && !p.ibu_id && !unit(p).some(x => x.ayah_id || x.ibu_id));
     app.innerHTML = '<div class="scroll"><div class="tree"><ul>' + roots.map(r => seen.has(r.id) ? '' : node(r, seen)).join('') + '</ul></div></div>';
   } else {
     app.innerHTML = '<input class="q" id="q" type="search" placeholder="Cari nama…" oninput="renderList()"><div class="grid" id="gl"></div>';
@@ -138,26 +155,32 @@ function render() {
 function renderList() {
   const q = ($('#q').value || '').toLowerCase();
   const l = D.filter(p => p.nama.toLowerCase().includes(q)).sort((a, b) => a.nama.localeCompare(b.nama));
-  $('#gl').innerHTML = l.length ? l.map(card).join('') : '<div class="empty w">Tidak ada nama yang cocok.</div>';
+  $('#gl').innerHTML = l.length ? l.map(p => card(p)).join('') : '<div class="empty w">Tidak ada nama yang cocok.</div>';
 }
 function view(v) { V = v; $('#t1').classList.toggle('on', v === 'tree'); $('#t2').classList.toggle('on', v === 'list'); render(); }
 
 /* ---------- Detail ---------- */
 function detail(id) {
-  const p = by(id), f = by(p.ayah_id), m = by(p.ibu_id), s = by(p.pasangan_id);
+  const p = by(id), f = by(p.ayah_id), m = by(p.ibu_id), s = spouses(p);
   const anak = D.filter(k => k.ayah_id === id || k.ibu_id === id);
   const row = (a, b) => b ? `<p style="margin:4px 0"><span style="color:var(--mute)">${a}:</span> ${esc(b)}</p>` : '';
   Swal.fire({
     title: esc(p.nama), showConfirmButton: false, showCloseButton: true,
-    html: `<div style="text-align:left">${row('Jenis kelamin', p.gender === 'P' ? 'Perempuan' : 'Laki-laki')}${row('Lahir', p.lahir)}${row('Wafat', p.wafat)}${row('Ayah', f && f.nama)}${row('Ibu', m && m.nama)}${row('Pasangan', s && s.nama)}${row('Anak', anak.map(k => k.nama).join(', '))}${row('Catatan', p.catatan)}</div>
+    html: `<div style="text-align:left">${row('Jenis kelamin', p.gender === 'P' ? 'Perempuan' : 'Laki-laki')}${row('Lahir', p.lahir)}${row('Wafat', p.wafat)}${row('Ayah', f && f.nama)}${row('Ibu', m && m.nama)}${row('Pasangan', s.map(x => x.nama).join(', '))}${row('Anak', anak.map(k => k.nama).join(', '))}${row('Catatan', p.catatan)}</div>
     <div class="acts"><button class="btn" onclick="Swal.close();edit('${id}')">Ubah</button><button class="btn o" onclick="Swal.close();addChild('${id}')">Tambah anak</button><button class="btn r" onclick="Swal.close();del('${id}')">Hapus</button></div>`
   });
 }
 const edit = id => openForm(by(id));
-function addChild(id) {
-  const p = by(id), s = by(p.pasangan_id);
+async function addChild(id) {
+  const p = by(id), sp = spouses(p);
+  let s = sp[0];
+  if (sp.length > 1) {
+    const r = await Swal.fire({title:'Anak dari pasangan yang mana?', input:'select', inputOptions:Object.fromEntries(sp.map(x => [x.id, x.nama])), showCancelButton:true, confirmButtonText:'Lanjut', cancelButtonText:'Batal'});
+    if (!r.isConfirmed) return;
+    s = by(r.value);
+  }
   const f = p.gender === 'L' ? p : s, m = p.gender === 'P' ? p : s;
-  openForm({ayah_id: f ? f.id : '', ibu_id: m ? m.id : ''}, true);
+  openForm({ayah_id: f ? f.id : '', ibu_id: m ? m.id : ''});
 }
 
 /* ---------- Form ---------- */
@@ -175,12 +198,12 @@ async function openForm(p = {}) {
       <div><label>Wafat</label><input id="w" value="${esc(p.wafat)}" placeholder="kosongkan jika hidup"></div>
       <div><label>Ayah</label><select id="a">${opt(p.ayah_id, others.filter(x => x.gender === 'L'))}</select></div>
       <div><label>Ibu</label><select id="i">${opt(p.ibu_id, others.filter(x => x.gender === 'P'))}</select></div>
-      <div class="w"><label>Pasangan</label><select id="s">${opt(p.pasangan_id, others)}</select></div>
+      <div class="w"><label>Pasangan (boleh lebih dari satu)</label><div class="chk">${others.length ? others.map(x => `<label><input type="checkbox" class="sp" value="${x.id}" ${split(p.pasangan_id).includes(x.id) ? 'checked' : ''}> ${esc(x.nama)}</label>`).join('') : '<small>Belum ada anggota lain</small>'}</div></div>
       <div class="w"><label>Catatan</label><textarea id="c" rows="2">${esc(p.catatan)}</textarea></div></div>`,
     preConfirm: () => {
       const g = id => document.getElementById(id).value.trim();
       if (!g('n')) { Swal.showValidationMessage('Nama wajib diisi'); return false; }
-      return {nama:g('n'), gender:g('g'), foto:g('fo'), lahir:g('l'), wafat:g('w'), ayah_id:g('a'), ibu_id:g('i'), pasangan_id:g('s'), catatan:g('c')};
+      return {nama:g('n'), gender:g('g'), foto:g('fo'), lahir:g('l'), wafat:g('w'), ayah_id:g('a'), ibu_id:g('i'), pasangan_id:[...document.querySelectorAll('.sp:checked')].map(x => x.value).join(','), catatan:g('c')};
     }
   });
   if (!v) return;
@@ -190,10 +213,16 @@ async function openForm(p = {}) {
   try {
     const r = await api(p.id ? 'update' : 'add', v);
     const id = p.id || r.id;
-    const s = by(v.pasangan_id);               // sinkronkan pasangan dua arah
-    if (s && s.pasangan_id !== id) await api('update', {...s, pasangan_id: id});
-    const old = p.pasangan_id && p.pasangan_id !== v.pasangan_id && by(p.pasangan_id);
-    if (old && old.pasangan_id === id) await api('update', {...old, pasangan_id: ''});
+    const nw = split(v.pasangan_id), od = split(p.pasangan_id);   // sinkronkan pasangan dua arah
+    for (const sid of nw.filter(x => !od.includes(x))) {
+      const s = by(sid); if (!s) continue;
+      const l = split(s.pasangan_id);
+      if (!l.includes(id)) { l.push(id); await api('update', {...s, pasangan_id: l.join(',')}); }
+    }
+    for (const sid of od.filter(x => !nw.includes(x))) {
+      const s = by(sid); if (!s) continue;
+      await api('update', {...s, pasangan_id: split(s.pasangan_id).filter(x => x !== id).join(',')});
+    }
     await load(true);
     Swal.close(); toast('success', 'Data berhasil disimpan');
   } catch (e) { Swal.fire('Gagal menyimpan', e.message, 'error'); }

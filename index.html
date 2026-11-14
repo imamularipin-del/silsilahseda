@@ -34,14 +34,16 @@ main{padding:16px;padding-bottom:calc(24px + env(safe-area-inset-bottom))}
 .tree li::before,.tree li::after{content:"";position:absolute;top:0;right:50%;border-top:2px solid var(--line);width:50%;height:20px}
 .tree li::after{right:auto;left:50%;border-left:2px solid var(--line)}
 .tree li:only-child::before,.tree li:only-child::after{display:none}
-.tree li:only-child{padding-top:20px}
+.tree li:only-child{padding-top:0}
 .tree li:first-child::before,.tree li:last-child::after{border:0}
 .tree li:last-child::before{border-right:2px solid var(--line);border-radius:0 8px 0 0}
 .tree li:first-child::after{border-radius:8px 0 0 0}
 .tree ul ul::before{content:"";position:absolute;top:0;left:50%;border-left:2px solid var(--line);height:20px}
 .cp{display:inline-flex;align-items:center;gap:4px}
-.h{color:#e11d48;font-size:14px}
-.c{width:132px;background:var(--card);border:1px solid var(--bd);border-top:4px solid;border-radius:12px;padding:10px 8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center}
+.h{position:relative;width:36px;height:18px;line-height:18px;text-align:center;color:#e11d48;font-size:13px}
+.h::before{content:"";position:absolute;left:0;right:0;top:50%;border-top:2px solid var(--line)}
+.h i{font-style:normal;position:relative;background:var(--bg);padding:0 3px}
+.c{width:132px;min-height:100px;justify-content:center;background:var(--card);border:1px solid var(--bd);border-top:4px solid;border-radius:12px;padding:10px 8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center}
 .c.L{border-top-color:#3b82f6}.c.P{border-top-color:#ec4899}
 .c .av{width:52px;height:52px;border-radius:50%;object-fit:cover;background:var(--L);display:grid;place-items:center;font-size:22px;margin-bottom:4px}
 .c.P .av{background:var(--P)}
@@ -56,7 +58,13 @@ input.q{width:100%;max-width:420px;margin-bottom:16px;padding:10px 14px;border-r
 .f label{font-size:12px;color:var(--mute);display:block;margin-bottom:2px}
 .f input,.f select,.f textarea{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font:inherit;background:#fff;color:#111}
 .chk{max-height:130px;overflow:auto;border:1px solid var(--bd);border-radius:8px;padding:4px 10px;background:#fff}.chk label{display:flex;gap:8px;align-items:center;font-size:14px;color:#111;margin:0;padding:4px 0}.chk input{width:auto}
-.fam{display:inline-flex;align-items:flex-start;gap:4px}.wc{display:flex;flex-direction:column;align-items:center}.fam>.h{margin-top:42px}
+.fam{display:inline-flex;align-items:flex-start}
+.wc{position:relative;display:flex;flex-direction:column;align-items:center;padding:0 10px}
+.wc::before,.wc::after{content:"";position:absolute;top:50px;width:50%;border-top:2px solid var(--line)}
+.wc::before{left:0}.wc::after{left:50%}
+.wc:first-child::before,.wc:last-child::after{display:none}
+.wc>.c{position:relative;z-index:1}
+.hh{position:absolute;left:0;top:41px;transform:translateX(-50%);z-index:2;background:var(--bg);color:#e11d48;font-size:13px;line-height:18px;padding:0 3px}
 .acts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
 .swal2-popup{font-family:Inter,system-ui,sans-serif}
 </style>
@@ -145,18 +153,30 @@ function node(p, seen) {
   // satu pasangan: pasangan berdampingan, anak di bawahnya
   if (others.length < 2) {
     const kids = D.filter(k => (ids.includes(k.ayah_id) || ids.includes(k.ibu_id)) && !seen.has(k.id));
-    return `<li><div class="cp">${[head, ...others].map((x, i) => (i ? '<span class="h">♥</span>' : '') + card(x)).join('')}</div>${ul(kids)}</li>`;
+    return `<li><div class="cp">${[head, ...others].map((x, i) => (i ? '<span class="h"><i>♥</i></span>' : '') + card(x)).join('')}</div>${ul(kids)}</li>`;
   }
 
-  // beberapa pasangan: anak digantung di bawah ibunya masing-masing
-  const cols = others.map(w => {
-    const ks = D.filter(k => (k.ayah_id === w.id || k.ibu_id === w.id) && !seen.has(k.id));
-    return `<span class="h">♥</span><div class="wc">${card(w)}${ul(ks)}</div>`;
-  }).join('');
-  const own = D.filter(k => (ids.includes(k.ayah_id) || ids.includes(k.ibu_id)) && !seen.has(k.id));  // anak tanpa ibu/ayah tercatat
-  return `<li><div class="fam"><div class="wc">${card(head)}${ul(own)}</div>${cols}</div></li>`;
+  // beberapa pasangan: kepala keluarga di tengah, anak digantung di bawah ibunya masing-masing
+  const col = (x, ks, first) => `<div class="wc${x === head ? ' head' : ''}">${first ? '' : '<span class="hh">♥</span>'}${card(x)}${ul(ks)}</div>`;
+  const taken = new Set();   // setiap anak hanya muncul di satu kolom
+  const kidsOf = w => { const r = D.filter(k => (k.ayah_id === w.id || k.ibu_id === w.id) && !seen.has(k.id) && !taken.has(k.id)); r.forEach(k => taken.add(k.id)); return r; };
+  const half = Math.floor(others.length / 2);
+  const left = others.slice(0, half).map(w => [w, kidsOf(w)]);
+  const right = others.slice(half).map(w => [w, kidsOf(w)]);
+  const own = D.filter(k => (ids.includes(k.ayah_id) || ids.includes(k.ibu_id)) && !seen.has(k.id) && !taken.has(k.id));
+  const cols = [...left, [head, own], ...right];
+  return `<li><div class="fam">${cols.map(([x, ks], i) => col(x, ks, i === 0)).join('')}</div></li>`;
 }
 
+function alignFam() {  // geser blok keluarga agar kartu kepala keluarga tepat di bawah garis induknya
+  document.querySelectorAll('.fam').forEach(f => {
+    f.style.margin = '0';
+    const hd = f.querySelector('.wc.head');
+    const r = hd.getBoundingClientRect(), fr = f.getBoundingClientRect();
+    const d = fr.width - 2 * (r.left - fr.left + r.width / 2);
+    if (d > 1) f.style.marginLeft = d + 'px'; else if (d < -1) f.style.marginRight = -d + 'px';
+  });
+}
 function render() {
   $('#stat').textContent = D.length + ' anggota';
   const app = $('#app');
@@ -165,6 +185,7 @@ function render() {
     const seen = new Set();
     const roots = D.filter(p => !p.ayah_id && !p.ibu_id && !unit(p).some(x => x.ayah_id || x.ibu_id));
     app.innerHTML = '<div class="scroll"><div class="tree"><ul>' + roots.map(r => seen.has(r.id) ? '' : node(r, seen)).join('') + '</ul></div></div>';
+    alignFam();
   } else {
     app.innerHTML = '<input class="q" id="q" type="search" placeholder="Cari nama…" oninput="renderList()"><div class="grid" id="gl"></div>';
     renderList();

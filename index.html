@@ -106,10 +106,11 @@ async function needKey() {
 async function api(action, person) {
   let txt;
   try {
-    const res = await fetch(API, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, redirect:'follow', body:JSON.stringify({action, key:KEY, person})});
+    const qs = new URLSearchParams({action, key:KEY, p:JSON.stringify(person), _t:Date.now()});
+    const res = await fetch(API + '?' + qs, {cache:'no-store'});
     txt = await res.text();
   } catch (e) {
-    throw new Error('Server tidak dapat dihubungi (diblokir CORS/jaringan). Buat deployment baru dengan akses "Anyone" lalu perbarui URL API.');
+    throw new Error('Server tidak dapat dihubungi. Periksa koneksi dan pastikan URL API adalah deployment terbaru (akses "Anyone").');
   }
   let r;
   try { r = JSON.parse(txt); }

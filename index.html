@@ -31,13 +31,18 @@ main{padding:16px;padding-bottom:calc(24px + env(safe-area-inset-bottom))}
 .tree>ul{padding-top:0}
 .tree li{list-style:none;text-align:center;position:relative;padding:20px 6px 0}
 .tree>ul>li{padding-top:0}
-.tree li::before,.tree li::after{content:"";position:absolute;top:0;right:50%;border-top:2px solid var(--line);width:50%;height:20px}
-.tree li::after{right:auto;left:50%;border-left:2px solid var(--line)}
+.tree li::before,.tree li::after{content:"";position:absolute;top:0;border-top:2px solid var(--line);height:20px}
+.tree li::before{left:0;width:var(--cx,50%)}
+.tree li::after{left:var(--cx,50%);width:calc(100% - var(--cx,50%));border-left:2px solid var(--line)}
 .tree li:only-child::before,.tree li:only-child::after{display:none}
 .tree li:only-child{padding-top:0}
 .tree li:first-child::before,.tree li:last-child::after{border:0}
 .tree li:last-child::before{border-right:2px solid var(--line);border-radius:0 8px 0 0}
 .tree li:first-child::after{border-radius:8px 0 0 0}
+.tree li.jog{padding-top:20px}
+.tree li.jog::before{display:block;left:var(--a);width:var(--w);height:0;border:0;border-top:2px solid var(--line);border-radius:0}
+.tree li.jog::after{display:block;left:var(--cx);width:0;height:20px;border:0;border-left:2px solid var(--line);border-radius:0}
+.ord{list-style:none;margin:6px 0 14px;padding:0}.ord li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;margin-bottom:6px;text-align:left;color:#222}.ord button{border:1px solid #ccc;background:#fff;color:#222;border-radius:6px;padding:4px 12px;cursor:pointer;margin-left:4px}
 .tree ul ul::before{content:"";position:absolute;top:0;left:50%;border-left:2px solid var(--line);height:20px}
 .cp{display:inline-flex;align-items:center;gap:4px}
 .h{position:relative;width:36px;height:18px;line-height:18px;text-align:center;color:#e11d48;font-size:13px}
@@ -87,6 +92,7 @@ let D = [], V = 'tree', KEY = '';
 const $ = s => document.querySelector(s);
 const by = id => D.find(p => p.id === id);
 const split = s => String(s || '').split(',').filter(Boolean);
+const ord = (a, b) => (parseInt(a.urutan) || 9999) - (parseInt(b.urutan) || 9999);
 const spouses = p => { const ids = new Set(split(p.pasangan_id)); D.forEach(x => { if (split(x.pasangan_id).includes(p.id)) ids.add(x.id); }); return [...ids].map(by).filter(Boolean); };
 const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const toast = (icon, title) => Swal.fire({toast:true, position:'top-end', icon, title, showConfirmButton:false, timer:2600, timerProgressBar:true});
@@ -152,29 +158,34 @@ function node(p, seen) {
 
   // satu pasangan: pasangan berdampingan, anak di bawahnya
   if (others.length < 2) {
-    const kids = D.filter(k => (ids.includes(k.ayah_id) || ids.includes(k.ibu_id)) && !seen.has(k.id));
+    const kids = D.filter(k => (ids.includes(k.ayah_id) || ids.includes(k.ibu_id)) && !seen.has(k.id)).sort(ord);
     return `<li><div class="cp">${[head, ...others].map((x, i) => (i ? '<span class="h"><i>♥</i></span>' : '') + card(x)).join('')}</div>${ul(kids)}</li>`;
   }
 
-  // beberapa pasangan: kepala keluarga di tengah, anak digantung di bawah ibunya masing-masing
+  // beberapa pasangan: suami di kiri, istri berurutan ke kanan, anak digantung di bawah ibunya masing-masing
   const col = (x, ks, first) => `<div class="wc${x === head ? ' head' : ''}">${first ? '' : '<span class="hh">♥</span>'}${card(x)}${ul(ks)}</div>`;
   const taken = new Set();   // setiap anak hanya muncul di satu kolom
-  const kidsOf = w => { const r = D.filter(k => (k.ayah_id === w.id || k.ibu_id === w.id) && !seen.has(k.id) && !taken.has(k.id)); r.forEach(k => taken.add(k.id)); return r; };
-  const half = Math.floor(others.length / 2);
-  const left = others.slice(0, half).map(w => [w, kidsOf(w)]);
-  const right = others.slice(half).map(w => [w, kidsOf(w)]);
-  const own = D.filter(k => (ids.includes(k.ayah_id) || ids.includes(k.ibu_id)) && !seen.has(k.id) && !taken.has(k.id));
-  const cols = [...left, [head, own], ...right];
+  const kidsOf = w => { const r = D.filter(k => (k.ayah_id === w.id || k.ibu_id === w.id) && !seen.has(k.id) && !taken.has(k.id)).sort(ord); r.forEach(k => taken.add(k.id)); return r; };
+  const rest = others.map(w => [w, kidsOf(w)]);
+  const own = D.filter(k => (ids.includes(k.ayah_id) || ids.includes(k.ibu_id)) && !seen.has(k.id) && !taken.has(k.id)).sort(ord);
+  const cols = [[head, own], ...rest];
   return `<li><div class="fam">${cols.map(([x, ks], i) => col(x, ks, i === 0)).join('')}</div></li>`;
 }
 
-function alignFam() {  // geser blok keluarga agar kartu kepala keluarga tepat di bawah garis induknya
-  document.querySelectorAll('.fam').forEach(f => {
-    f.style.margin = '0';
-    const hd = f.querySelector('.wc.head');
-    const r = hd.getBoundingClientRect(), fr = f.getBoundingClientRect();
-    const d = fr.width - 2 * (r.left - fr.left + r.width / 2);
-    if (d > 1) f.style.marginLeft = d + 'px'; else if (d < -1) f.style.marginRight = -d + 'px';
+function alignLines() {  // sambungkan garis induk tepat ke kartu kepala keluarga
+  document.querySelectorAll('.tree li').forEach(li => {
+    const hd = li.querySelector(':scope > .fam > .wc.head');
+    if (!hd) return;
+    const lr = li.getBoundingClientRect(), r = hd.getBoundingClientRect();
+    const cx = r.left - lr.left + r.width / 2;
+    li.style.setProperty('--cx', cx + 'px');
+    const top = li.parentElement.parentElement.classList.contains('tree');
+    if (!top && li.matches(':only-child') && Math.abs(cx - lr.width / 2) > 2) {
+      const m = lr.width / 2;
+      li.classList.add('jog');
+      li.style.setProperty('--a', Math.min(cx, m) + 'px');
+      li.style.setProperty('--w', Math.abs(cx - m) + 'px');
+    }
   });
 }
 function render() {
@@ -183,9 +194,9 @@ function render() {
   if (!D.length) { app.innerHTML = '<div class="empty"><p>Belum ada anggota keluarga.</p><button class="btn" onclick="openForm()">Tambah anggota pertama</button></div>'; return; }
   if (V === 'tree') {
     const seen = new Set();
-    const roots = D.filter(p => !p.ayah_id && !p.ibu_id && !unit(p).some(x => x.ayah_id || x.ibu_id));
+    const roots = D.filter(p => !p.ayah_id && !p.ibu_id && !unit(p).some(x => x.ayah_id || x.ibu_id)).sort(ord);
     app.innerHTML = '<div class="scroll"><div class="tree"><ul>' + roots.map(r => seen.has(r.id) ? '' : node(r, seen)).join('') + '</ul></div></div>';
-    alignFam();
+    alignLines();
   } else {
     app.innerHTML = '<input class="q" id="q" type="search" placeholder="Cari nama…" oninput="renderList()"><div class="grid" id="gl"></div>';
     renderList();
@@ -201,12 +212,12 @@ function view(v) { V = v; $('#t1').classList.toggle('on', v === 'tree'); $('#t2'
 /* ---------- Detail ---------- */
 function detail(id) {
   const p = by(id), f = by(p.ayah_id), m = by(p.ibu_id), s = spouses(p);
-  const anak = D.filter(k => k.ayah_id === id || k.ibu_id === id);
+  const anak = D.filter(k => k.ayah_id === id || k.ibu_id === id).sort(ord);
   const row = (a, b) => b ? `<p style="margin:4px 0"><span style="color:var(--mute)">${a}:</span> ${esc(b)}</p>` : '';
   Swal.fire({
     title: esc(p.nama), showConfirmButton: false, showCloseButton: true,
     html: `<div style="text-align:left">${row('Jenis kelamin', p.gender === 'P' ? 'Perempuan' : 'Laki-laki')}${row('Lahir', p.lahir)}${row('Wafat', p.wafat)}${row('Ayah', f && f.nama)}${row('Ibu', m && m.nama)}${row('Pasangan', s.map(x => x.nama).join(', '))}${row('Anak', anak.map(k => k.nama).join(', '))}${row('Catatan', p.catatan)}</div>
-    <div class="acts"><button class="btn" onclick="Swal.close();edit('${id}')">Ubah</button><button class="btn o" onclick="Swal.close();addChild('${id}')">Tambah anak</button><button class="btn r" onclick="Swal.close();del('${id}')">Hapus</button></div>`
+    <div class="acts"><button class="btn" onclick="Swal.close();edit('${id}')">Ubah</button><button class="btn o" onclick="Swal.close();addChild('${id}')">Tambah anak</button>${split(p.pasangan_id).length > 1 || anak.length > 1 ? `<button class="btn o" onclick="Swal.close();orderDlg('${id}')">Atur urutan</button>` : ''}<button class="btn r" onclick="Swal.close();del('${id}')">Hapus</button></div>`
   });
 }
 const edit = id => openForm(by(id));
@@ -220,6 +231,29 @@ async function addChild(id) {
   }
   const f = p.gender === 'L' ? p : s, m = p.gender === 'P' ? p : s;
   openForm({ayah_id: f ? f.id : '', ibu_id: m ? m.id : ''});
+}
+
+/* ---------- Atur urutan ---------- */
+function mv(b, d) {
+  const li = b.closest('li'), ul = li.parentNode;
+  if (d < 0 && li.previousElementSibling) ul.insertBefore(li, li.previousElementSibling);
+  else if (d > 0 && li.nextElementSibling) ul.insertBefore(li.nextElementSibling, li);
+}
+async function orderDlg(id) {
+  const p = by(id);
+  const sp = split(p.pasangan_id).map(by).filter(Boolean);
+  const kd = D.filter(k => k.ayah_id === id || k.ibu_id === id).sort(ord);
+  const list = (t, arr, cls) => arr.length < 2 ? '' : `<div style="text-align:left;font-weight:600;margin-top:6px">${t}</div><ul class="ord ${cls}">${arr.map(x => `<li data-id="${x.id}"><span>${esc(x.nama)}</span><span><button type="button" onclick="mv(this,-1)" aria-label="Naik">▲</button><button type="button" onclick="mv(this,1)" aria-label="Turun">▼</button></span></li>`).join('')}</ul>`;
+  const r = await Swal.fire({title:'Atur urutan', html:list('Urutan pasangan (kiri ke kanan)', sp, 'sp') + list('Urutan anak (kiri ke kanan)', kd, 'kd'), showCancelButton:true, confirmButtonText:'Simpan urutan', cancelButtonText:'Batal'});
+  if (!r.isConfirmed || !(await needKey())) return;
+  const ids = c => [...document.querySelectorAll('.ord.' + c + ' li')].map(l => l.dataset.id);
+  const items = [];
+  busy('Menyimpan urutan…');
+  const s = sp.length > 1 ? ids('sp') : [];
+  if (s.length) items.push({id, pasangan_id: s.concat(split(p.pasangan_id).filter(x => !s.includes(x))).join(',')});
+  (kd.length > 1 ? ids('kd') : []).forEach((kid, i) => items.push({id: kid, urutan: String(i + 1)}));
+  try { await api('bulk', items); await load(true); Swal.close(); toast('success', 'Urutan berhasil disimpan'); }
+  catch (e) { Swal.fire('Gagal menyimpan urutan', e.message, 'error'); }
 }
 
 /* ---------- Form ---------- */
@@ -248,6 +282,7 @@ async function openForm(p = {}) {
   if (!v) return;
   if (!(await needKey())) return;
   if (p.id) v.id = p.id;
+  v.urutan = p.urutan || '';
   busy('Menyimpan…');
   try {
     const r = await api(p.id ? 'update' : 'add', v);

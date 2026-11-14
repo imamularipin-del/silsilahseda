@@ -70,6 +70,19 @@ input.q{width:100%;max-width:420px;margin-bottom:16px;padding:10px 14px;border-r
 .wc:first-child::before,.wc:last-child::after{display:none}
 .wc>.c{position:relative;z-index:1}
 .hh{position:absolute;left:0;top:41px;transform:translateX(-50%);z-index:2;background:var(--bg);color:#e11d48;font-size:13px;line-height:18px;padding:0 3px}
+.cont{display:block;width:max-content;margin:6px auto 0;padding:2px 10px;border:1px dashed var(--line);border-radius:6px;font-size:11px;color:var(--mute)}
+#print{display:none}
+#print.prep{display:block;position:absolute;left:-99999px;top:0;width:var(--pw);--bg:#fff;--card:#fff;--ink:#111;--line:#777;--bd:#bbb;--L:#dbeafe;--P:#fce7f3;--mute:#555;--brand:#14532d;background:#fff;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.pg .pgb{display:flex;justify-content:center}
+.pg .tree{flex:none;width:max-content;min-width:0}
+.pgh{display:flex;justify-content:space-between;align-items:baseline;gap:12px;border-bottom:2px solid #14532d;padding-bottom:6px;margin-bottom:12px;font-size:13px}
+.pgh b{font:700 18px Fraunces,serif}
+@media print{
+  body>*:not(#print){display:none!important}
+  #print.prep{position:static!important;left:auto!important;width:auto!important}
+  .pg{break-after:page;page-break-after:always}
+  .pg:last-child{break-after:auto;page-break-after:auto}
+}
 .acts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
 .swal2-popup{font-family:Inter,system-ui,sans-serif}
 </style>
@@ -78,10 +91,12 @@ input.q{width:100%;max-width:420px;margin-bottom:16px;padding:10px 14px;border-r
 <header>
   <h1>Silsilah Keluarga<small id="stat"></small></h1>
   <div class="tabs" role="tablist"><button id="t1" class="on" onclick="view('tree')">Pohon</button><button id="t2" onclick="view('list')">Daftar</button></div>
+  <button class="btn o" onclick="printDlg()">Cetak</button>
   <button class="btn" onclick="openForm()">+ Anggota</button>
 </header>
 <main><div id="app"></div></main>
 
+<div id="print"></div>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.14.5/dist/sweetalert2.all.min.js"></script>
 <script>
 /* ====== KONFIGURASI: tempel URL Web App Apps Script Anda ====== */
@@ -92,6 +107,7 @@ let D = [], V = 'tree', KEY = '';
 const $ = s => document.querySelector(s);
 const by = id => D.find(p => p.id === id);
 const split = s => String(s || '').split(',').filter(Boolean);
+const headOf = comp => [...comp].sort((a, b) => spouses(b).length - spouses(a).length || (a.gender === 'L' ? -1 : 1) - (b.gender === 'L' ? -1 : 1))[0];
 const ord = (a, b) => (parseInt(a.urutan) || 9999) - (parseInt(b.urutan) || 9999);
 const spouses = p => { const ids = new Set(split(p.pasangan_id)); D.forEach(x => { if (split(x.pasangan_id).includes(p.id)) ids.add(x.id); }); return [...ids].map(by).filter(Boolean); };
 const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -147,14 +163,16 @@ function unit(p) {  // semua pasangan yang saling terhubung (suami + beberapa is
   return q;
 }
 
-function node(p, seen) {
+function node(p, seen, o) {   // o (opsional): batas generasi untuk cetak {d, max, cur, pages}
   const comp = unit(p);
-  const head = [...comp].sort((a, b) => spouses(b).length - spouses(a).length || (a.gender === 'L' ? -1 : 1) - (b.gender === 'L' ? -1 : 1))[0];
+  const head = headOf(comp);
   const sp = spouses(head);
   const others = [...sp, ...comp.filter(x => x !== head && !sp.includes(x))];
   comp.forEach(x => seen.add(x.id));
   const ids = comp.map(x => x.id);
-  const ul = ks => ks.length ? '<ul>' + ks.map(k => node(k, seen)).join('') + '</ul>' : '';
+  let cutNo = 0;
+  const cutTag = () => { if (!cutNo) { o.pages.push({root: p.id, from: o.cur}); cutNo = o.pages.length; } return `<div class="cont">↳ lanjut hlm. ${cutNo}</div>`; };
+  const ul = ks => !ks.length ? '' : (o && o.d >= o.max) ? cutTag() : '<ul>' + ks.map(k => node(k, seen, o && {...o, d: o.d + 1})).join('') + '</ul>';
 
   // satu pasangan: pasangan berdampingan, anak di bawahnya
   if (others.length < 2) {
@@ -232,6 +250,51 @@ async function addChild(id) {
   const f = p.gender === 'L' ? p : s, m = p.gender === 'P' ? p : s;
   openForm({ayah_id: f ? f.id : '', ibu_id: m ? m.id : ''});
 }
+
+/* ---------- Cetak per cabang ---------- */
+async function printDlg() {
+  const hasKids = p => D.some(k => k.ayah_id === p.id || k.ibu_id === p.id);
+  const roots = D.filter(p => !p.ayah_id && !p.ibu_id && hasKids(p));
+  const cand = [...roots, ...D.filter(p => hasKids(p) && !roots.includes(p)).sort((a, b) => a.nama.localeCompare(b.nama))];
+  if (!cand.length) return toast('info', 'Belum ada keturunan untuk dicetak');
+  const sel = (id, arr) => `<select id="${id}">${arr.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>`;
+  const { value: v } = await Swal.fire({
+    title: 'Cetak per cabang', width: 520, showCancelButton: true, confirmButtonText: 'Cetak / Simpan PDF', cancelButtonText: 'Batal', focusConfirm: false,
+    html: `<div class="f"><div class="w"><label>Mulai dari leluhur</label>${sel('pr', cand.map(p => [p.id, esc(p.nama)]))}</div>
+      <div><label>Generasi per halaman</label>${sel('pg', [[2,'2'],[3,'3'],[4,'4'],[5,'5'],[99,'Semua']])}</div>
+      <div><label>Ukuran kertas</label>${sel('pp', [['A4','A4'],['A3','A3'],['A5','A5']])}</div>
+      <div class="w"><label>Orientasi</label>${sel('po', [['L','Lanskap'],['P','Potret']])}</div></div>
+      <p style="font-size:12px;color:#666;text-align:left">Cabang yang tidak muat diberi penanda "lanjut hlm. N" dan dilanjutkan di halaman berikutnya.</p>`,
+    didOpen: () => { $('#pg').value = '3'; },
+    preConfirm: () => ({root: $('#pr').value, max: +$('#pg').value, paper: $('#pp').value, orient: $('#po').value})
+  });
+  if (v) doPrint(v);
+}
+
+function doPrint({root, max, paper, orient}) {
+  const PAPER = {A4: [297, 210], A3: [420, 297], A5: [210, 148]};
+  let [w, h] = PAPER[paper]; if (orient === 'P') [w, h] = [h, w];
+  const M = 10, mm = 3.7795;
+  const availW = (w - 2 * M) * mm, availH = (h - 2 * M) * mm - 60;
+  const pages = [{root, from: 0}], out = [];
+  for (let i = 0; i < pages.length; i++) {
+    const html = node(by(pages[i].root), new Set(), {d: 1, max, cur: i + 1, pages});
+    out.push({...pages[i], html});
+  }
+  const pr = $('#print');
+  pr.innerHTML = out.map((pg, i) => `<section class="pg"><div class="pgh"><b>Cabang keluarga ${esc(headOf(unit(by(pg.root))).nama)}</b><span>Halaman ${i + 1} / ${out.length}${pg.from ? ' · sambungan dari hlm. ' + pg.from : ''}</span></div><div class="pgb"><div class="tree"><ul>${pg.html}</ul></div></div></section>`).join('');
+  pr.style.setProperty('--pw', availW + 'px');
+  pr.classList.add('prep');
+  let st = $('#pgst'); if (!st) { st = document.createElement('style'); st.id = 'pgst'; document.head.appendChild(st); }
+  st.textContent = `@page{size:${paper} ${orient === 'P' ? 'portrait' : 'landscape'};margin:${M}mm}`;
+  alignLines();                                   // ukur garis pada skala 1, baru perkecil
+  pr.querySelectorAll('.tree').forEach(t => {
+    const sc = Math.min(1, availW / t.offsetWidth, availH / t.offsetHeight);
+    if (sc < 1) t.style.zoom = sc;
+  });
+  setTimeout(() => window.print(), 150);
+}
+window.addEventListener('afterprint', () => { const pr = $('#print'); pr.classList.remove('prep'); pr.innerHTML = ''; });
 
 /* ---------- Atur urutan ---------- */
 function mv(b, d) {

@@ -56,6 +56,7 @@ input.q{width:100%;max-width:420px;margin-bottom:16px;padding:10px 14px;border-r
 .f label{font-size:12px;color:var(--mute);display:block;margin-bottom:2px}
 .f input,.f select,.f textarea{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font:inherit;background:#fff;color:#111}
 .chk{max-height:130px;overflow:auto;border:1px solid var(--bd);border-radius:8px;padding:4px 10px;background:#fff}.chk label{display:flex;gap:8px;align-items:center;font-size:14px;color:#111;margin:0;padding:4px 0}.chk input{width:auto}
+.fam{display:inline-flex;align-items:flex-start;gap:4px}.wc{display:flex;flex-direction:column;align-items:center}.fam>.h{margin-top:42px}
 .acts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
 .swal2-popup{font-family:Inter,system-ui,sans-serif}
 </style>
@@ -132,21 +133,28 @@ function unit(p) {  // semua pasangan yang saling terhubung (suami + beberapa is
   return q;
 }
 
-function node(p, seen, nt = '') {
+function node(p, seen) {
   const comp = unit(p);
   const head = [...comp].sort((a, b) => spouses(b).length - spouses(a).length || (a.gender === 'L' ? -1 : 1) - (b.gender === 'L' ? -1 : 1))[0];
   const sp = spouses(head);
-  const order = [head, ...sp, ...comp.filter(x => x !== head && !sp.includes(x))];
+  const others = [...sp, ...comp.filter(x => x !== head && !sp.includes(x))];
   comp.forEach(x => seen.add(x.id));
   const ids = comp.map(x => x.id);
-  const kids = D.filter(k => (ids.includes(k.ayah_id) || ids.includes(k.ibu_id)) && !seen.has(k.id));
-  const note = k => {
-    if (comp.length < 3) return '';
-    const o = [k.ayah_id, k.ibu_id].filter(x => x && x !== head.id).map(by).find(x => x && ids.includes(x.id));
-    return o ? 'dari ' + o.nama : '';
-  };
-  const cards = order.map((x, i) => (i ? '<span class="h">♥</span>' : '') + card(x, x.id === p.id ? nt : '')).join('');
-  return `<li><div class="cp">${cards}</div>${kids.length ? '<ul>' + kids.map(k => node(k, seen, note(k))).join('') + '</ul>' : ''}</li>`;
+  const ul = ks => ks.length ? '<ul>' + ks.map(k => node(k, seen)).join('') + '</ul>' : '';
+
+  // satu pasangan: pasangan berdampingan, anak di bawahnya
+  if (others.length < 2) {
+    const kids = D.filter(k => (ids.includes(k.ayah_id) || ids.includes(k.ibu_id)) && !seen.has(k.id));
+    return `<li><div class="cp">${[head, ...others].map((x, i) => (i ? '<span class="h">♥</span>' : '') + card(x)).join('')}</div>${ul(kids)}</li>`;
+  }
+
+  // beberapa pasangan: anak digantung di bawah ibunya masing-masing
+  const cols = others.map(w => {
+    const ks = D.filter(k => (k.ayah_id === w.id || k.ibu_id === w.id) && !seen.has(k.id));
+    return `<span class="h">♥</span><div class="wc">${card(w)}${ul(ks)}</div>`;
+  }).join('');
+  const own = D.filter(k => (ids.includes(k.ayah_id) || ids.includes(k.ibu_id)) && !seen.has(k.id));  // anak tanpa ibu/ayah tercatat
+  return `<li><div class="fam"><div class="wc">${card(head)}${ul(own)}</div>${cols}</div></li>`;
 }
 
 function render() {

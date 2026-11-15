@@ -4,8 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Silsilah Keluarga</title>
-  <link rel="icon" type="image/png" href="icon-192.png" />
-  <link rel="apple-touch-icon" type="image/png" href="icon-512.png" />
 <meta name="theme-color" content="#14532d">
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11.14.5/dist/sweetalert2.min.css">
@@ -27,7 +25,17 @@ h1 small{display:block;font:400 12px Inter;color:var(--mute)}
 .btn.r{background:#b91c1c;color:#fff}
 button:focus-visible,input:focus-visible,.c:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 main{padding:16px;padding-bottom:calc(24px + env(safe-area-inset-bottom))}
-.scroll{overflow-x:auto;padding-bottom:16px}
+.scroll{overflow:auto;overscroll-behavior:contain;touch-action:pan-x pan-y}
+body.tv{overflow:hidden}body.tv main{padding-bottom:0}
+[hidden]{display:none!important}
+.zc{position:fixed;right:12px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:8;display:flex;flex-direction:column;gap:6px}
+.zc button{width:46px;height:42px;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--ink);font:600 18px Inter,sans-serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.zc #zl{font-size:11px}
+.tb{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.btn.sm{padding:6px 12px;font-size:13px}
+.cp{position:relative}.cw{position:relative;z-index:1}
+.tg{position:absolute;left:50%;bottom:-13px;transform:translateX(-50%);z-index:3;min-width:30px;height:26px;padding:0 8px;border:1px solid var(--line);border-radius:13px;background:var(--card);color:var(--ink);font:600 12px Inter,sans-serif;cursor:pointer}
+@media print{.tg,.zc{display:none!important}}
 .tree{display:inline-block;min-width:100%;text-align:center}
 .tree ul{display:flex;justify-content:center;padding:20px 0 0;margin:0;position:relative}
 .tree>ul{padding-top:0}
@@ -98,6 +106,12 @@ input.q{width:100%;max-width:420px;margin-bottom:16px;padding:10px 14px;border-r
 </header>
 <main><div id="app"></div></main>
 
+<div class="zc" id="zc" hidden>
+  <button onclick="zoomBy(1.25)" aria-label="Perbesar">+</button>
+  <button id="zl" onclick="setZ(1)" aria-label="Skala 100%">100%</button>
+  <button onclick="zoomBy(0.8)" aria-label="Perkecil">−</button>
+  <button onclick="fit()" aria-label="Muat seluruh pohon" title="Muat seluruh pohon">⤢</button>
+</div>
 <div id="print"></div>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.14.5/dist/sweetalert2.all.min.js"></script>
 <script>
@@ -174,16 +188,17 @@ function node(p, seen, o) {   // o (opsional): batas generasi untuk cetak {d, ma
   const ids = comp.map(x => x.id);
   let cutNo = 0;
   const cutTag = () => { if (!cutNo) { o.pages.push({root: p.id, from: o.cur}); cutNo = o.pages.length; } return `<div class="cont">↳ lanjut hlm. ${cutNo}</div>`; };
-  const ul = ks => !ks.length ? '' : (o && o.d >= o.max) ? cutTag() : '<ul>' + ks.map(k => node(k, seen, o && {...o, d: o.d + 1})).join('') + '</ul>';
+  const ul = (ks, key) => !ks.length ? '' : (o && o.d >= o.max) ? cutTag() : (!o && COL.has(key)) ? '' : '<ul>' + ks.map(k => node(k, seen, o && {...o, d: o.d + 1})).join('') + '</ul>';
+  const tgl = (key, ks) => (o || !ks.length) ? '' : `<button class="tg" onclick="tog('${key}')" aria-label="${COL.has(key) ? 'Buka cabang' : 'Ciutkan cabang'}">${COL.has(key) ? '+' + descN(ks.map(k => k.id)) : '−'}</button>`;
 
   // satu pasangan: pasangan berdampingan, anak di bawahnya
   if (others.length < 2) {
     const kids = D.filter(k => (ids.includes(k.ayah_id) || ids.includes(k.ibu_id)) && !seen.has(k.id)).sort(ord);
-    return `<li><div class="cp">${[head, ...others].map((x, i) => (i ? '<span class="h"><i>♥</i></span>' : '') + card(x)).join('')}</div>${ul(kids)}</li>`;
+    return `<li><div class="cp">${[head, ...others].map((x, i) => (i ? '<span class="h"><i>♥</i></span>' : '') + card(x)).join('')}${tgl(head.id, kids)}</div>${ul(kids, head.id)}</li>`;
   }
 
   // beberapa pasangan: suami di kiri, istri berurutan ke kanan, anak digantung di bawah ibunya masing-masing
-  const col = (x, ks, first) => `<div class="wc${x === head ? ' head' : ''}">${first ? '' : '<span class="hh">♥</span>'}${card(x)}${ul(ks)}</div>`;
+  const col = (x, ks, first) => `<div class="wc${x === head ? ' head' : ''}">${first ? '' : '<span class="hh">♥</span>'}<div class="cw">${card(x)}${tgl(x.id, ks)}</div>${ul(ks, x.id)}</div>`;
   const taken = new Set();   // setiap anak hanya muncul di satu kolom
   const kidsOf = w => { const r = D.filter(k => (k.ayah_id === w.id || k.ibu_id === w.id) && !seen.has(k.id) && !taken.has(k.id)).sort(ord); r.forEach(k => taken.add(k.id)); return r; };
   const rest = others.map(w => [w, kidsOf(w)]);
@@ -208,15 +223,82 @@ function alignLines() {  // sambungkan garis induk tepat ke kartu kepala keluarg
     }
   });
 }
+let Z = 0;   // skala pohon (0 = belum diatur)
+let COL = new Set(); try { COL = new Set(JSON.parse(localStorage.getItem('col') || '[]')); } catch (e) {}
+const saveCol = () => { try { localStorage.setItem('col', JSON.stringify([...COL])); } catch (e) {} };
+
+function descN(ids) {   // jumlah keturunan (termasuk anak langsung)
+  const seen = new Set(ids), q = [...ids];
+  while (q.length) { const x = q.pop(); D.forEach(k => { if ((k.ayah_id === x || k.ibu_id === x) && !seen.has(k.id)) { seen.add(k.id); q.push(k.id); } }); }
+  return seen.size;
+}
+function tog(key) { COL.has(key) ? COL.delete(key) : COL.add(key); saveCol(); render(); }
+function colAll(on) {
+  COL.clear();
+  if (on) D.forEach(p => { if (D.some(k => k.ayah_id === p.id || k.ibu_id === p.id)) COL.add(p.id); });
+  saveCol(); render();
+}
+
+function zl() { const e = $('#zl'); if (e) e.textContent = Math.round((Z || 1) * 100) + '%'; }
+function sizeScroll() {
+  const sc = $('.scroll'); if (!sc) return;
+  sc.style.height = Math.max(240, innerHeight - sc.getBoundingClientRect().top - 8) + 'px';
+}
+function setZ(z, fx, fy) {   // ubah skala dengan titik fokus tetap
+  const sc = $('.scroll'), t = $('.tree'); if (!sc || !t) return;
+  z = Math.max(0.05, Math.min(2, z));
+  const old = Z || 1;
+  fx = fx == null ? sc.clientWidth / 2 : fx; fy = fy == null ? sc.clientHeight / 2 : fy;
+  const cx = (sc.scrollLeft + fx) / old, cy = (sc.scrollTop + fy) / old;
+  t.style.zoom = z; Z = z;
+  sc.scrollLeft = cx * z - fx; sc.scrollTop = cy * z - fy;
+  zl();
+}
+const zoomBy = f => setZ((Z || 1) * f);
+function fit(initial) {   // initial: skala awal yang nyaman dibaca; tanpa argumen: muat seluruh pohon
+  const sc = $('.scroll'), t = $('.tree'); if (!sc || !t) return;
+  t.style.zoom = 1; Z = 1;
+  const w = t.offsetWidth, hh = t.offsetHeight;
+  let z = w > sc.clientWidth ? (sc.clientWidth - 8) / w : 1;
+  if (initial) z = Math.max(z, 0.5); else z = Math.min(z, (sc.clientHeight - 8) / hh);
+  t.style.zoom = Z = Math.max(0.05, Math.min(1, z));
+  sc.scrollLeft = (sc.scrollWidth - sc.clientWidth) / 2; sc.scrollTop = 0;
+  zl();
+}
+(function gestures() {   // cubit dua jari (HP) dan Ctrl+roda (komputer)
+  const app = $('#app'); let pin = null;
+  const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  app.addEventListener('touchstart', e => { if (e.touches.length === 2 && e.target.closest('.scroll')) pin = {d: dist(e.touches), z: Z || 1}; }, {passive: true});
+  app.addEventListener('touchmove', e => {
+    if (!pin || e.touches.length !== 2) return;
+    e.preventDefault();
+    const r = $('.scroll').getBoundingClientRect();
+    setZ(pin.z * dist(e.touches) / pin.d, (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left, (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top);
+  }, {passive: false});
+  app.addEventListener('touchend', e => { if (e.touches.length < 2) pin = null; });
+  app.addEventListener('wheel', e => {
+    if (!e.ctrlKey || !e.target.closest('.scroll')) return;
+    e.preventDefault();
+    const r = $('.scroll').getBoundingClientRect();
+    setZ((Z || 1) * (e.deltaY < 0 ? 1.1 : 0.9), e.clientX - r.left, e.clientY - r.top);
+  }, {passive: false});
+  addEventListener('resize', sizeScroll);
+})();
+
 function render() {
   $('#stat').textContent = D.length + ' anggota';
-  const app = $('#app');
+  const app = $('#app'), zc = $('#zc');
+  zc.hidden = true; document.body.classList.remove('tv');
   if (!D.length) { app.innerHTML = '<div class="empty"><p>Belum ada anggota keluarga.</p><button class="btn" onclick="openForm()">Tambah anggota pertama</button></div>'; return; }
   if (V === 'tree') {
+    const old = $('.scroll'), sl = old ? old.scrollLeft : 0, st = old ? old.scrollTop : 0;
     const seen = new Set();
     const roots = D.filter(p => !p.ayah_id && !p.ibu_id && !unit(p).some(x => x.ayah_id || x.ibu_id)).sort(ord);
-    app.innerHTML = '<div class="scroll"><div class="tree"><ul>' + roots.map(r => seen.has(r.id) ? '' : node(r, seen)).join('') + '</ul></div></div>';
-    alignLines();
+    app.innerHTML = '<div class="tb"><button class="btn o sm" onclick="colAll(true)">Ciutkan semua</button><button class="btn o sm" onclick="colAll(false)">Buka semua</button></div><div class="scroll"><div class="tree"><ul>' + roots.map(r => seen.has(r.id) ? '' : node(r, seen)).join('') + '</ul></div></div>';
+    document.body.classList.add('tv'); zc.hidden = false;
+    alignLines();   // ukur garis pada skala 1, baru terapkan zoom
+    sizeScroll();
+    if (Z) { const sc = $('.scroll'); $('.tree').style.zoom = Z; sc.scrollLeft = sl; sc.scrollTop = st; zl(); } else fit(true);
   } else {
     app.innerHTML = '<input class="q" id="q" type="search" placeholder="Cari nama…" oninput="renderList()"><div class="grid" id="gl"></div>';
     renderList();

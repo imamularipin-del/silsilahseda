@@ -95,6 +95,9 @@ input.q{width:100%;max-width:420px;margin-bottom:16px;padding:10px 14px;border-r
 }
 .cp>.h{align-self:stretch;height:auto;display:flex;align-items:center;justify-content:center}
 .cp.hk>.h::after{content:"";position:absolute;left:calc(50% - 1px);top:calc(50% + 9px);bottom:0;border-left:2px solid var(--line)}
+.c.ref{border-style:dashed}
+.tree>ul>li::before,.tree>ul>li::after{display:none!important}
+.tree>ul{gap:56px;align-items:flex-start}
 .acts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
 .swal2-popup{font-family:Inter,system-ui,sans-serif}
 </style>
@@ -169,16 +172,21 @@ async function api(action, person) {
 }
 
 /* ---------- Tampilan ---------- */
-function card(p, note, e) {
+function card(p, note, e, ref) {
   const y = [p.lahir, p.wafat].filter(Boolean).join(' – ');
   const av = p.foto ? `<img class="av" src="${esc(p.foto)}" alt="" onerror="this.outerHTML='<div class=&quot;av&quot;>${p.gender === 'P' ? '♀' : '♂'}</div>'">` : `<div class="av">${p.gender === 'P' ? '♀' : '♂'}</div>`;
-  return `<div class="c ${p.gender}"${e ? ' data-e' : ''} tabindex="0" role="button" onclick="detail('${p.id}')" onkeydown="if(event.key==='Enter')detail('${p.id}')">${av}<b>${esc(p.nama)}</b><small>${esc(y)}</small>${note ? `<small><i>${esc(note)}</i></small>` : ''}</div>`;
+  return `<div class="c ${p.gender}${ref ? ' ref' : ''}"${e ? ' data-e' : ''} tabindex="0" role="button" onclick="detail('${p.id}')" onkeydown="if(event.key==='Enter')detail('${p.id}')">${av}<b>${esc(p.nama)}</b><small>${esc(y)}</small>${note ? `<small><i>${esc(note)}</i></small>` : ''}</div>`;
 }
 
-function unit(p) {  // semua pasangan yang saling terhubung (suami + beberapa istri)
-  const seen = new Set([p.id]), q = [p];
-  for (let i = 0; i < q.length; i++) for (const s of spouses(q[i])) if (!seen.has(s.id)) { seen.add(s.id); q.push(s); }
-  return q;
+const isRef = x => !!(x.ayah_id || x.ibu_id);   // punya orang tua tercatat: ia digambar di cabang orang tuanya
+const refNote = x => { const f = by(x.ayah_id) || by(x.ibu_id); return f ? (x.gender === 'P' ? 'binti ' : 'bin ') + f.nama : ''; };
+function unit(p) {  // p + pasangannya (suami dengan beberapa istri). Pasangan yang punya orang tua hanya dicantumkan, tidak ditelusuri
+  const comp = [p], seen = new Set([p.id]);
+  for (let i = 0; i < comp.length; i++) {
+    if (i > 0 && isRef(comp[i])) continue;
+    for (const s of spouses(comp[i])) if (!seen.has(s.id)) { seen.add(s.id); comp.push(s); }
+  }
+  return comp;
 }
 
 function node(p, seen, o) {   // o (opsional): batas generasi untuk cetak {d, max, cur, pages}
@@ -186,8 +194,10 @@ function node(p, seen, o) {   // o (opsional): batas generasi untuk cetak {d, ma
   const head = p;   // keturunan yang digambar; garis induk selalu masuk ke kartunya
   const sp = spouses(head);
   const others = [...sp, ...comp.filter(x => x !== head && !sp.includes(x))];
-  comp.forEach(x => seen.add(x.id));
-  const ids = comp.map(x => x.id);
+  const mineIds = comp.filter(x => x === p || !isRef(x)).map(x => x.id);   // yang digambar di cabang ini
+  mineIds.forEach(id => seen.add(id));                                        // pasangan referensi tidak ditandai
+  const mine = k => mineIds.includes(k.ayah_id) || mineIds.includes(k.ibu_id);
+  const cd = x => (x !== p && isRef(x)) ? card(x, refNote(x), false, true) : card(x, '', x === head);
   let cutNo = 0;
   const cutTag = () => { if (!cutNo) { o.pages.push({root: p.id, from: o.cur}); cutNo = o.pages.length; } return `<div class="cont">↳ lanjut hlm. ${cutNo}</div>`; };
   const ul = (ks, key) => !ks.length ? '' : (o && o.d >= o.max) ? cutTag() : (!o && COL.has(key)) ? '' : '<ul>' + ks.map(k => node(k, seen, o && {...o, d: o.d + 1})).join('') + '</ul>';
@@ -195,18 +205,19 @@ function node(p, seen, o) {   // o (opsional): batas generasi untuk cetak {d, ma
 
   // satu pasangan: pasangan berdampingan, anak di bawahnya
   if (others.length < 2) {
-    const kids = D.filter(k => (ids.includes(k.ayah_id) || ids.includes(k.ibu_id)) && !seen.has(k.id)).sort(ord);
-    return `<li><div class="cp${kids.length ? ' hk' : ''}">${[head, ...others].map((x, i) => (i ? '<span class="h"><i>♥</i></span>' : '') + card(x, '', x === head)).join('')}${tgl(head.id, kids)}</div>${ul(kids, head.id)}</li>`;
+    const all = D.filter(mine), kids = all.filter(k => !seen.has(k.id)).sort(ord);
+    const away = all.length && !kids.length ? '<div class="cont">↳ anak ditampilkan di cabang pasangan</div>' : '';
+    return `<li><div class="cp${kids.length ? ' hk' : ''}">${[head, ...others].map((x, i) => (i ? '<span class="h"><i>♥</i></span>' : '') + cd(x)).join('')}${tgl(head.id, kids)}</div>${ul(kids, head.id)}${away}</li>`;
   }
 
   // beberapa pasangan: suami di kiri, istri berurutan ke kanan, anak digantung di bawah ibunya masing-masing
-  const col = (x, ks, first) => `<div class="wc${x === head ? ' head' : ''}">${first ? '' : '<span class="hh">♥</span>'}<div class="cw">${card(x, '', x === head)}${tgl(x.id, ks)}</div>${ul(ks, x.id)}</div>`;
+  const col = (x, ks, first, away) => `<div class="wc${x === head ? ' head' : ''}">${first ? '' : '<span class="hh">♥</span>'}<div class="cw">${cd(x)}${tgl(x.id, ks)}</div>${ul(ks, x.id)}${away ? '<div class="cont">↳ anak ditampilkan di cabang pasangan</div>' : ''}</div>`;
   const taken = new Set();   // setiap anak hanya muncul di satu kolom
-  const kidsOf = w => { const r = D.filter(k => (k.ayah_id === w.id || k.ibu_id === w.id) && !seen.has(k.id) && !taken.has(k.id)).sort(ord); r.forEach(k => taken.add(k.id)); return r; };
-  const rest = others.map(w => [w, kidsOf(w)]);
-  const own = D.filter(k => (ids.includes(k.ayah_id) || ids.includes(k.ibu_id)) && !seen.has(k.id) && !taken.has(k.id)).sort(ord);
-  const cols = [[head, own], ...rest];
-  return `<li><div class="fam">${cols.map(([x, ks], i) => col(x, ks, i === 0)).join('')}</div></li>`;
+  const kidsOf = w => { const r = D.filter(k => (k.ayah_id === w.id || k.ibu_id === w.id) && mine(k) && !seen.has(k.id) && !taken.has(k.id)).sort(ord); r.forEach(k => taken.add(k.id)); return r; };
+  const rest = others.map(w => [w, kidsOf(w), D.some(k => (k.ayah_id === w.id || k.ibu_id === w.id) && mine(k) && seen.has(k.id))]);
+  const own = D.filter(k => mine(k) && !seen.has(k.id) && !taken.has(k.id)).sort(ord);
+  const cols = [[head, own, false], ...rest];
+  return `<li><div class="fam">${cols.map(([x, ks, aw], i) => col(x, ks, i === 0, aw)).join('')}</div></li>`;
 }
 
 function alignLines() {  // garis induk selalu tersambung ke kartu keturunan; jarak garis seragam

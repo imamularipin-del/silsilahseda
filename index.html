@@ -117,19 +117,22 @@ main{display:flex;gap:16px;align-items:flex-start}
 .row.on{background:var(--L)}
 @media(max-width:819px){main{display:block}#side{position:fixed;right:0;top:0;bottom:0;height:100dvh!important;width:min(86vw,340px);z-index:20;border-radius:12px 0 0 12px;transform:translateX(105%);transition:transform .2s;box-shadow:-6px 0 24px rgba(0,0,0,.25)}#side.open{transform:none}}
 @media(min-width:820px){.zc{right:330px}body.nosd .zc{right:12px}}
-.ar{display:flex;justify-content:center;align-items:flex-end;gap:28px;margin-bottom:40px}
+.ar{display:flex;justify-content:center;align-items:flex-end;gap:32px;margin-bottom:60px}
 .ac{display:flex;flex-direction:column;align-items:center}
 .cpl{display:inline-flex;align-items:center;gap:4px}
 .pl{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;overflow:visible}
 .pl path{fill:none;stroke:var(--line);stroke-width:2;stroke-linejoin:round}
 .c.me{outline:3px solid var(--brand);outline-offset:3px}
-.pedtop{display:flex;justify-content:center;margin-bottom:46px}
+.pedtop{display:flex;justify-content:center;margin-bottom:64px}
 .co{display:inline-flex;align-items:center;gap:4px}
 .cpl{gap:12px}
 .tree.ped>ul{gap:0}
 .tree.ped>ul>li{padding-top:20px}
 .tree.ped>ul>li:only-child{padding-top:0}
 .tree.ped>ul>li:not(:only-child)::before,.tree.ped>ul>li:not(:only-child)::after{display:block!important}
+.cpl{align-items:stretch;gap:40px}
+.grp{display:inline-flex;gap:8px;align-items:stretch}
+.pl .hb{fill:var(--bg);stroke:none}.pl .ht{fill:#e11d48;font-size:13px;stroke:none}
 .acts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
 .swal2-popup{font-family:Inter,system-ui,sans-serif}
 </style>
@@ -374,42 +377,55 @@ function pedBody(id, seen) {
   const p = by(id), F = by(p.ayah_id), M = by(p.ibu_id), ik = {n: 0};
   const heart = '<span class="h"><i>♥</i></span>';
   const par = x => { const f = by(x.ayah_id), m = by(x.ibu_id); return (f || m) ? [f, m] : null; };
-  // satu aturan untuk semua tingkat: pasangan (a ♥ b), saudara a di kiri, saudara b di kanan, orang tua mereka di atas
+  // satu aturan untuk semua tingkat: kelompok saudara a (terurut, a di posisinya) + kelompok saudara b, orang tua mereka di atas
   const up = (a, b, to, depth) => {
     const mk = x => ({x, i: ++ik.n});
-    const sa = (PSIB && a) ? sibSet(a).filter(s => s.id !== a.id && !(b && s.id === b.id)).map(mk) : [];
-    const sb = (PSIB && b) ? sibSet(b).filter(s => s.id !== b.id && !(a && s.id === a.id) && !sa.some(o => o.x.id === s.id)).map(mk) : [];
-    const A = a && mk(a), B = b && mk(b);
+    const grp = (x, skip) => !x ? [] : ((PSIB && sibSet(x).some(k => k.id === x.id)) ? sibSet(x) : [x]).filter(k => k.id === x.id || !skip.includes(k.id)).map(mk);
+    const GA = grp(a, b ? [b.id] : []), GB = grp(b, [...(a ? [a.id] : []), ...GA.map(o => o.x.id)]);
+    const A = a && GA.find(o => o.x.id === a.id), B = b && GB.find(o => o.x.id === b.id);
     const pa = a && depth < 12 && par(a), pb = b && depth < 12 && par(b);
-    const ua = pa ? up(pa[0], pa[1], [A, ...sa].map(o => o.i).join(','), depth + 1) : '';
-    const ub = pb ? up(pb[0], pb[1], [B, ...sb].map(o => o.i).join(','), depth + 1) : '';
-    const cd = (o, anc, own) => card(o.x, own ? '' : rel(o.x, anc), false, false, o.i);
-    const co = (A ? cd(A, a, true) : '') + (A && B ? heart : '') + (B ? cd(B, b, true) : '');
-    return `<div class="ac">${ua || ub ? `<div class="ar">${ua}${ub}</div>` : ''}<div class="cpl" data-up="${to}">${sa.map(o => cd(o, a)).join('')}<span class="co">${co}</span>${sb.map(o => cd(o, b)).join('')}</div></div>`;
+    const ua = pa ? up(pa[0], pa[1], GA.map(o => o.i).join(','), depth + 1) : '';
+    const ub = pb ? up(pb[0], pb[1], GB.map(o => o.i).join(','), depth + 1) : '';
+    const cards = (G, anc) => `<span class="grp">${G.map(o => card(o.x, o.x.id === anc.id ? '' : rel(o.x, anc), false, false, o.i)).join('')}</span>`;
+    return `<div class="ac">${ua || ub ? `<div class="ar">${ua}${ub}</div>` : ''}<div class="cpl" data-up="${to}" data-a="${A ? A.i : ''}" data-b="${B ? B.i : ''}">${a ? cards(GA, a) : ''}${b ? cards(GB, b) : ''}</div></div>`;
   };
   const sibs = (F || M) ? sibSet(p) : [p];   // p + semua saudaranya (kakak dan adik, termasuk saudara tiri)
   const low = sibs.map(k => node(k, seen, undefined, k.id === id ? {} : {nokids: true, note: rel(k, p)})).join('');
   return {top: (F || M) ? up(F, M, 'low', 0) : '', low};
 }
-function drawPed() {   // garis siku dari pasangan leluhur ke anak-anaknya (diukur pada skala 1)
+function drawPed() {   // garis leluhur: kurung pernikahan (♥) di bawah kartu, lalu siku membulat ke anak-anak (diukur pada skala 1)
   const t = $('.tree'), svg = t && t.querySelector('svg.pl'); if (!svg) return;
-  const tr = t.getBoundingClientRect(); let d = '';
-  const ctr = c => { const r = c.getBoundingClientRect(); return [r.left + r.width / 2, r.top]; };
+  const tr = t.getBoundingClientRect(), R = c => c.getBoundingClientRect(), X = v => v - tr.left, Y = v => v - tr.top;
+  const elbow = (sx, sy, ex, ey, my) => {
+    if (Math.abs(ex - sx) < 1) return `M${X(sx)} ${Y(sy)}V${Y(ey)}`;
+    const dir = ex > sx ? 1 : -1, r = Math.max(0, Math.min(8, Math.abs(ex - sx) / 2, my - sy, ey - my));
+    return `M${X(sx)} ${Y(sy)}V${Y(my) - r}Q${X(sx)} ${Y(my)} ${X(sx) + dir * r} ${Y(my)}H${X(ex) - dir * r}Q${X(ex)} ${Y(my)} ${X(ex)} ${Y(my) + r}V${Y(ey)}`;
+  };
+  let d = '', hearts = '';
   t.querySelectorAll('.cpl[data-up]').forEach(u => {
-    const cs = [...u.querySelectorAll('.c')], ub = Math.max(...cs.map(c => c.getBoundingClientRect().bottom));
-    const hh = u.querySelector('.co .h'); let sx, sy;
-    if (hh) { const r = hh.getBoundingClientRect(); sx = r.left + r.width / 2; sy = r.top + r.height / 2 + 9; }
-    else { const r = u.querySelector('.co .c').getBoundingClientRect(); sx = r.left + r.width / 2; sy = r.bottom; }
+    const ub = Math.max(...[...u.querySelectorAll('.c')].map(c => R(c).bottom));
+    const A = u.dataset.a && t.querySelector(`.c[data-ik="${u.dataset.a}"]`), B = u.dataset.b && t.querySelector(`.c[data-ik="${u.dataset.b}"]`);
+    let sx, sy;
+    if (A && B) {
+      const ra = R(A), rb = R(B), ax = ra.left + ra.width / 2, bx = rb.left + rb.width / 2, y0 = ub + 14, dir = bx > ax ? 1 : -1, r = 8;
+      d += `M${X(ax)} ${Y(ra.bottom)}V${Y(y0) - r}Q${X(ax)} ${Y(y0)} ${X(ax) + dir * r} ${Y(y0)}H${X(bx) - dir * r}Q${X(bx)} ${Y(y0)} ${X(bx)} ${Y(y0) - r}V${Y(rb.bottom)}`;
+      sx = (ax + bx) / 2; sy = y0 + 9;
+      hearts += `<circle class="hb" cx="${X(sx)}" cy="${Y(y0)}" r="9"/><text class="ht" x="${X(sx)}" y="${Y(y0)}" text-anchor="middle" dominant-baseline="central">♥</text>`;
+    } else {
+      const c = A || B; if (!c) return;
+      const r = R(c); sx = r.left + r.width / 2; sy = r.bottom;
+    }
+    const ctr = c => { const r = R(c); return [r.left + r.width / 2, r.top]; };
     let ends = [];
-    if (u.dataset.up === 'low') {   // anak-anak: garis menuju garis sambung (bus) baris bawah
+    if (u.dataset.up === 'low') {   // anak-anak: menuju garis sambung (bus) baris bawah
       const es = [...t.querySelectorAll(':scope > ul > li')].map(li => ({li, c: li.querySelector(':scope > .cp > .c[data-e], :scope > .fam > .wc.head > .cw > .c[data-e]')})).filter(o => o.c);
       if (!es.length) return;
       const xs = es.map(o => ctr(o.c)[0]);
-      ends = es.length === 1 ? [ctr(es[0].c)] : [[Math.min(Math.max(sx, xs[0]), xs[xs.length - 1]), es[0].li.getBoundingClientRect().top]];
+      ends = es.length === 1 ? [ctr(es[0].c)] : [[Math.min(Math.max(sx, xs[0]), xs[xs.length - 1]), R(es[0].li).top]];
     } else ends = u.dataset.up.split(',').map(k => t.querySelector(`.c[data-ik="${k}"]`)).filter(Boolean).map(ctr);
-    ends.forEach(([ex, ey]) => { d += `M${sx - tr.left} ${sy - tr.top}V${(ub + ey) / 2 - tr.top}H${ex - tr.left}V${ey - tr.top}`; });
+    ends.forEach(([ex, ey]) => { d += elbow(sx, sy, ex, ey, (sy + ey) / 2); });
   });
-  svg.innerHTML = `<path d="${d}"/>`;
+  svg.innerHTML = `<path d="${d}"/>${hearts}`;
 }
 function relayout() {
   const t = $('.tree'), sc = $('.scroll'); if (!t) return;

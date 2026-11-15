@@ -100,6 +100,8 @@ input.q{width:100%;max-width:420px;margin-bottom:16px;padding:10px 14px;border-r
 .tree>ul{gap:56px;align-items:flex-start}
 .c.flash{outline:3px solid #f59e0b;outline-offset:3px}
 .tree{position:relative}
+.scroll{text-align:center}
+.tree.ped{min-width:0;width:max-content}
 main{display:flex;gap:16px;align-items:flex-start}
 #app{flex:1;min-width:0}
 #side{display:flex;flex-direction:column;width:300px;flex:none;background:var(--card);border:1px solid var(--bd);border-radius:12px;overflow:hidden}
@@ -390,6 +392,15 @@ function drawPed() {   // garis siku dari pasangan leluhur ke anaknya (diukur pa
   svg.innerHTML = `<path d="${d}"/>`;
 }
 
+function relayout() {
+  const t = $('.tree'), sc = $('.scroll'); if (!t) return;
+  const sl = sc.scrollLeft, st = sc.scrollTop, z = Z;
+  t.style.zoom = 1;
+  document.querySelectorAll('.tree li.jog').forEach(li => li.classList.remove('jog'));
+  alignLines(); drawPed();
+  if (z) t.style.zoom = z;
+  sc.scrollLeft = sl; sc.scrollTop = st;
+}
 function render() {
   $('#stat').textContent = D.length + ' anggota';
   const app = $('#app'), zc = $('#zc');
@@ -403,7 +414,7 @@ function render() {
   const bar = ped ? `<span style="align-self:center;font-size:13px">Silsilah <b>${esc(ped.nama)}</b></span><button class="btn sm" onclick="showPed('')">Pohon besar</button>`
     : foc ? `<span style="align-self:center;font-size:13px">Cabang <b>${esc(foc.nama)}</b></span><button class="btn sm" onclick="setFocus('')">Tampilkan semua</button>` : '';
   const body = ped ? pedBody(PED, seen) : foc ? node(foc, seen) : roots.map(r => seen.has(r.id) ? '' : node(headOf(unit(r)), seen)).join('');
-  app.innerHTML = '<div class="tb">' + bar + '<button class="btn o sm" onclick="colAll(true)">Ciutkan semua</button><button class="btn o sm" onclick="colAll(false)">Buka semua</button></div><div class="scroll"><div class="tree"><ul>' + body + '</ul>' + (ped ? '<svg class="pl"></svg>' : '') + '</div></div>';
+  app.innerHTML = '<div class="tb">' + bar + '<button class="btn o sm" onclick="colAll(true)">Ciutkan semua</button><button class="btn o sm" onclick="colAll(false)">Buka semua</button></div><div class="scroll"><div class="tree' + (ped ? ' ped' : '') + '"><ul>' + body + '</ul>' + (ped ? '<svg class="pl"></svg>' : '') + '</div></div>';
   document.body.classList.add('tv'); zc.hidden = false;
   alignLines(); drawPed();   // ukur garis pada skala 1, baru terapkan zoom
   sizeScroll();
@@ -573,6 +584,7 @@ async function del(id) {
   catch (e) { Swal.fire('Gagal menghapus', e.message, 'error'); }
 }
 
+if (document.fonts) document.fonts.ready.then(() => relayout());
 load();
 </script>
 </body>

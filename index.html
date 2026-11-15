@@ -99,6 +99,28 @@ input.q{width:100%;max-width:420px;margin-bottom:16px;padding:10px 14px;border-r
 .tree>ul>li::before,.tree>ul>li::after{display:none!important}
 .tree>ul{gap:56px;align-items:flex-start}
 .c.flash{outline:3px solid #f59e0b;outline-offset:3px}
+.tree{position:relative}
+main{display:flex;gap:16px;align-items:flex-start}
+#app{flex:1;min-width:0}
+#side{display:flex;flex-direction:column;width:300px;flex:none;background:var(--card);border:1px solid var(--bd);border-radius:12px;overflow:hidden}
+#side.hide{display:none}
+.sh{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--bd)}
+.sh b{flex:1}.sh span{color:var(--mute);font-size:12px}.sh .x{border:0;background:none;color:var(--ink);font-size:18px;cursor:pointer;padding:0 4px}
+#side input.q{width:calc(100% - 20px);max-width:none;margin:10px}
+.sl{overflow-y:auto;flex:1;overscroll-behavior:contain}
+.row{display:flex;gap:10px;align-items:center;width:100%;text-align:left;padding:8px 12px;border:0;border-bottom:1px solid var(--bd);background:none;color:var(--ink);cursor:pointer;font:inherit}
+.row .av{width:36px;height:36px;border-radius:50%;object-fit:cover;background:var(--L);display:grid;place-items:center;flex:none;font-size:16px}
+.row.P .av{background:var(--P)}
+.row b{font-weight:600;font-size:14px}.row small{display:block;color:var(--mute);font-size:12px}
+.row.on{background:var(--L)}
+@media(max-width:819px){main{display:block}#side{position:fixed;right:0;top:0;bottom:0;height:100dvh!important;width:min(86vw,340px);z-index:20;border-radius:12px 0 0 12px;transform:translateX(105%);transition:transform .2s;box-shadow:-6px 0 24px rgba(0,0,0,.25)}#side.open{transform:none}}
+@media(min-width:820px){.zc{right:330px}body.nosd .zc{right:12px}}
+.ar{display:flex;justify-content:center;align-items:flex-end;gap:28px;margin-bottom:40px}
+.ac{display:flex;flex-direction:column;align-items:center}
+.cpl{display:inline-flex;align-items:center;gap:4px}
+.pl{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.pl path{fill:none;stroke:var(--line);stroke-width:2;stroke-linejoin:round}
+.c.me{outline:3px solid var(--brand);outline-offset:3px}
 .acts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
 .swal2-popup{font-family:Inter,system-ui,sans-serif}
 </style>
@@ -106,11 +128,18 @@ input.q{width:100%;max-width:420px;margin-bottom:16px;padding:10px 14px;border-r
 <body>
 <header>
   <h1>Silsilah Keluarga<small id="stat"></small></h1>
-  <div class="tabs" role="tablist"><button id="t1" class="on" onclick="view('tree')">Pohon</button><button id="t2" onclick="view('list')">Daftar</button></div>
+  <button class="btn o" id="sb" onclick="toggleSide()">☰ Daftar</button>
   <button class="btn o" onclick="printDlg()">Cetak</button>
   <button class="btn" onclick="openForm()">+ Anggota</button>
 </header>
-<main><div id="app"></div></main>
+<main>
+  <div id="app"></div>
+  <aside id="side" aria-label="Daftar anggota">
+    <div class="sh"><b>Daftar anggota</b><span id="sc"></span><button class="x" onclick="toggleSide()" aria-label="Tutup daftar">✕</button></div>
+    <input class="q" id="q" type="search" placeholder="Cari nama…" oninput="renderList()">
+    <div class="sl" id="gl"></div>
+  </aside>
+</main>
 
 <div class="zc" id="zc" hidden>
   <button onclick="zoomBy(1.25)" aria-label="Perbesar">+</button>
@@ -173,10 +202,10 @@ async function api(action, person) {
 }
 
 /* ---------- Tampilan ---------- */
-function card(p, note, e, ref) {
+function card(p, note, e, ref, ik) {
   const y = [p.lahir, p.wafat].filter(Boolean).join(' – ');
   const av = p.foto ? `<img class="av" src="${esc(p.foto)}" alt="" onerror="this.outerHTML='<div class=&quot;av&quot;>${p.gender === 'P' ? '♀' : '♂'}</div>'">` : `<div class="av">${p.gender === 'P' ? '♀' : '♂'}</div>`;
-  return `<div class="c ${p.gender}${ref ? ' ref' : ''}" data-pid="${p.id}"${e ? ' data-e' : ''} tabindex="0" role="button" onclick="detail('${p.id}')" onkeydown="if(event.key==='Enter')detail('${p.id}')">${av}<b>${esc(p.nama)}</b><small>${esc(y)}</small>${note ? `<small><i>${esc(note)}</i></small>` : ''}</div>`;
+  return `<div class="c ${p.gender}${ref ? ' ref' : ''}" data-pid="${p.id}"${ik ? ' data-ik="' + ik + '"' : ''}${e ? ' data-e' : ''} tabindex="0" role="button" onclick="detail('${p.id}')" onkeydown="if(event.key==='Enter')detail('${p.id}')">${av}<b>${esc(p.nama)}</b><small>${esc(y)}</small>${note ? `<small><i>${esc(note)}</i></small>` : ''}</div>`;
 }
 
 const isRef = x => !!(x.ayah_id || x.ibu_id);   // punya orang tua tercatat: ia digambar di cabang orang tuanya
@@ -190,29 +219,31 @@ function unit(p) {  // p + pasangannya (suami dengan beberapa istri). Pasangan y
   return comp;
 }
 
-function node(p, seen, o) {   // o (opsional): batas generasi untuk cetak {d, max, cur, pages}
+function node(p, seen, o, X) {   // o (opsional): batas generasi untuk cetak {d, max, cur, pages}
   const comp = unit(p);
+  if (X && X.force) X.force.forEach(f => { if (!comp.includes(f)) comp.push(f); });
+  const ab = (X && X.above) || '';
   const head = p;   // keturunan yang digambar; garis induk selalu masuk ke kartunya
   const sp = spouses(head);
   const others = [...sp, ...comp.filter(x => x !== head && !sp.includes(x))];
-  const mineIds = comp.filter(x => x === p || !isRef(x)).map(x => x.id);   // yang digambar di cabang ini
+  const mineIds = comp.filter(x => x === p || !isRef(x) || (X && X.real && X.real.includes(x.id))).map(x => x.id);   // yang digambar di cabang ini
   mineIds.forEach(id => seen.add(id));                                        // pasangan referensi tidak ditandai
   const mine = k => mineIds.includes(k.ayah_id) || mineIds.includes(k.ibu_id);
   const homeOf = k => by(k.ayah_id) || by(k.ibu_id);                    // rumah anak: garis ayah (jika tak ada, ibu)
   const isHome = k => { const f = homeOf(k); return !!f && mineIds.includes(f.id); };
   const live = k => isHome(k) ? !seen.has(k.id) : true;                   // anak lintas-cabang selalu dicantumkan
   const refKid = k => `<li><div class="cp">${card(k, '↗ cabang ' + homeOf(k).nama, true, true)}</div></li>`;
-  const cd = x => (x !== p && isRef(x)) ? card(x, refNote(x), false, true) : card(x, '', x === head);
+  const cd = x => (x !== p && isRef(x) && !(X && X.real && X.real.includes(x.id))) ? card(x, refNote(x), false, true) : card(x, '', x === head);
   let cutNo = 0;
   const cutTag = () => { if (!cutNo) { o.pages.push({root: p.id, from: o.cur}); cutNo = o.pages.length; } return `<div class="cont">↳ lanjut hlm. ${cutNo}</div>`; };
-  const ul = (ks, key) => !ks.length ? '' : (o && o.d >= o.max) ? cutTag() : (!o && COL.has(key)) ? '' : '<ul>' + ks.map(k => isHome(k) ? node(k, seen, o && {...o, d: o.d + 1}) : refKid(k)).join('') + '</ul>';
-  const tgl = (key, ks) => (o || !ks.length) ? '' : `<button class="tg" onclick="tog('${key}')" aria-label="${COL.has(key) ? 'Buka cabang' : 'Ciutkan cabang'}">${COL.has(key) ? '+' + (descN(ks.filter(isHome).map(k => k.id)) + ks.filter(k => !isHome(k)).length) : '−'}</button>`;
+  const ul = (ks, key) => (!ks.length || (X && X.nokids)) ? '' : (o && o.d >= o.max) ? cutTag() : (!o && COL.has(key)) ? '' : '<ul>' + ks.map(k => isHome(k) ? node(k, seen, o && {...o, d: o.d + 1}, X && X.target ? (k.id === X.target ? {} : {nokids: true}) : undefined) : refKid(k)).join('') + '</ul>';
+  const tgl = (key, ks) => (o || (X && X.nokids) || !ks.length) ? '' : `<button class="tg" onclick="tog('${key}')" aria-label="${COL.has(key) ? 'Buka cabang' : 'Ciutkan cabang'}">${COL.has(key) ? '+' + (descN(ks.filter(isHome).map(k => k.id)) + ks.filter(k => !isHome(k)).length) : '−'}</button>`;
 
   // satu pasangan: pasangan berdampingan, anak di bawahnya
   if (others.length < 2) {
     const kids = D.filter(k => mine(k) && live(k)).sort(ord);
     const away = '';
-    return `<li><div class="cp${kids.length ? ' hk' : ''}">${[head, ...others].map((x, i) => (i ? '<span class="h"><i>♥</i></span>' : '') + cd(x)).join('')}${tgl(head.id, kids)}</div>${ul(kids, head.id)}${away}</li>`;
+    return `<li>${ab}<div class="cp${kids.length && !(X && X.nokids) ? ' hk' : ''}">${[head, ...others].map((x, i) => (i ? '<span class="h"><i>♥</i></span>' : '') + cd(x)).join('')}${tgl(head.id, kids)}</div>${ul(kids, head.id)}${away}</li>`;
   }
 
   // beberapa pasangan: suami di kiri, istri berurutan ke kanan, anak digantung di bawah ibunya masing-masing
@@ -222,7 +253,7 @@ function node(p, seen, o) {   // o (opsional): batas generasi untuk cetak {d, ma
   const rest = others.map(w => [w, kidsOf(w), false]);
   const own = D.filter(k => mine(k) && live(k) && !taken.has(k.id)).sort(ord);
   const cols = [[head, own, false], ...rest];
-  return `<li><div class="fam">${cols.map(([x, ks, aw], i) => col(x, ks, i === 0, aw)).join('')}</div></li>`;
+  return `<li>${ab}<div class="fam">${cols.map(([x, ks, aw], i) => col(x, ks, i === 0, aw)).join('')}</div></li>`;
 }
 
 function alignLines() {  // garis induk selalu tersambung ke kartu keturunan; jarak garis seragam
@@ -241,6 +272,7 @@ function alignLines() {  // garis induk selalu tersambung ke kartu keturunan; ja
     }
   });
 }
+let PED = '';     // id orang yang silsilahnya sedang ditampilkan
 let FOCUS = '';   // id leluhur bila sedang melihat satu cabang
 let Z = 0;   // skala pohon (0 = belum diatur)
 let COL = new Set(); try { COL = new Set(JSON.parse(localStorage.getItem('col') || '[]')); } catch (e) {}
@@ -251,12 +283,12 @@ function descN(ids) {   // jumlah keturunan (termasuk anak langsung)
   while (q.length) { const x = q.pop(); D.forEach(k => { if ((k.ayah_id === x || k.ibu_id === x) && !seen.has(k.id)) { seen.add(k.id); q.push(k.id); } }); }
   return seen.size;
 }
-function setFocus(id) { FOCUS = id; Z = 0; render(); }
+function setFocus(id) { FOCUS = id; PED = ''; Z = 0; render(); }
 function goto(id) {   // pindah ke kartu asli seseorang di pohon dan beri sorotan
   if (V !== 'tree') view('tree');
   const find = () => document.querySelector(`.tree .c[data-pid="${id}"]:not(.ref)`);
   let el = find();
-  if (!el && (FOCUS || COL.size)) { FOCUS = ''; COL.clear(); saveCol(); Z = 0; render(); el = find(); }
+  if (!el && (FOCUS || PED || COL.size)) { FOCUS = ''; PED = ''; COL.clear(); saveCol(); Z = 0; render(); el = find(); }
   if (!el) return toast('info', 'Tidak ditemukan di pohon');
   const sc = $('.scroll'), r = el.getBoundingClientRect(), s = sc.getBoundingClientRect();
   sc.scrollLeft += r.left - s.left - (sc.clientWidth - r.width) / 2;
@@ -272,6 +304,7 @@ function colAll(on) {
 
 function zl() { const e = $('#zl'); if (e) e.textContent = Math.round((Z || 1) * 100) + '%'; }
 function sizeScroll() {
+  const sd = $('#side'); if (sd && innerWidth >= 820) sd.style.height = Math.max(240, innerHeight - sd.getBoundingClientRect().top - 8) + 'px';
   const sc = $('.scroll'); if (!sc) return;
   sc.style.height = Math.max(240, innerHeight - sc.getBoundingClientRect().top - 8) + 'px';
 }
@@ -316,43 +349,91 @@ function fit(initial) {   // initial: skala awal yang nyaman dibaca; tanpa argum
   addEventListener('resize', sizeScroll);
 })();
 
+function toggleSide() { const s = $('#side'); s.classList.toggle(innerWidth < 820 ? 'open' : 'hide'); document.body.classList.toggle('nosd', s.classList.contains('hide')); sizeScroll(); }
+function showPed(id) { PED = id; FOCUS = ''; Z = 0; if (innerWidth < 820) $('#side').classList.remove('open'); render(); }
+function centerOn(el) {
+  const sc = $('.scroll'), r = el.getBoundingClientRect(), s = sc.getBoundingClientRect();
+  sc.scrollLeft += r.left - s.left - (sc.clientWidth - r.width) / 2;
+  sc.scrollTop += r.top - s.top - (sc.clientHeight - r.height) / 2;
+}
+
+/* Silsilah per orang: leluhur ke atas (ayah + ibu, kakek-nenek, dst), saudara, pasangan, dan keturunan */
+function pedBody(id, seen) {
+  const p = by(id), F = by(p.ayah_id), M = by(p.ibu_id), ik = {n: 0};
+  const heart = '<span class="h"><i>♥</i></span>';
+  const par = x => { const f = by(x.ayah_id), m = by(x.ibu_id); return (f || m) ? [f, m] : null; };
+  const up = (a, b, to, depth) => {   // pasangan orang tua, digambar di atas anaknya
+    const ia = a ? ++ik.n : 0, ib = b ? ++ik.n : 0;
+    const pa = a && depth < 12 && par(a), pb = b && depth < 12 && par(b);
+    const ua = pa ? up(pa[0], pa[1], ia, depth + 1) : '', ub = pb ? up(pb[0], pb[1], ib, depth + 1) : '';
+    return `<div class="ac">${ua || ub ? `<div class="ar">${ua}${ub}</div>` : ''}<div class="cpl" data-up="${to}">${a ? card(a, '', false, false, ia) : ''}${a && b ? heart : ''}${b ? card(b, '', false, false, ib) : ''}</div></div>`;
+  };
+  const root = F || M;
+  if (!root) return node(p, seen);
+  const real = [F, M].filter(Boolean);
+  const upper = real.map(x => { const pr = par(x); return pr ? up(pr[0], pr[1], 'pid:' + x.id, 1) : ''; }).join('');
+  return node(root, seen, undefined, {above: upper ? `<div class="ar">${upper}</div>` : '', force: real.filter(x => x !== root), real: real.map(x => x.id), target: id});
+}
+function drawPed() {   // garis siku dari pasangan leluhur ke anaknya (diukur pada skala 1)
+  const t = $('.tree'), svg = t && t.querySelector('svg.pl'); if (!svg) return;
+  const tr = t.getBoundingClientRect(); let d = '';
+  t.querySelectorAll('.cpl[data-up]').forEach(u => {
+    const k = u.dataset.up, tg = k.startsWith('pid:') ? t.querySelector(`.c[data-pid="${k.slice(4)}"]`) : t.querySelector(`.c[data-ik="${k}"]`);
+    if (!tg) return;
+    const cs = [...u.querySelectorAll('.c')], ub = Math.max(...cs.map(c => c.getBoundingClientRect().bottom));
+    const hh = u.querySelector('.h'); let sx, sy;
+    if (hh) { const r = hh.getBoundingClientRect(); sx = r.left + r.width / 2; sy = r.top + r.height / 2 + 9; }
+    else { const r = cs[0].getBoundingClientRect(); sx = r.left + r.width / 2; sy = r.bottom; }
+    const e = tg.getBoundingClientRect(), ex = e.left + e.width / 2, ey = e.top, my = (ub + ey) / 2;
+    d += `M${sx - tr.left} ${sy - tr.top}V${my - tr.top}H${ex - tr.left}V${ey - tr.top}`;
+  });
+  svg.innerHTML = `<path d="${d}"/>`;
+}
+
 function render() {
   $('#stat').textContent = D.length + ' anggota';
   const app = $('#app'), zc = $('#zc');
   zc.hidden = true; document.body.classList.remove('tv');
-  if (!D.length) { app.innerHTML = '<div class="empty"><p>Belum ada anggota keluarga.</p><button class="btn" onclick="openForm()">Tambah anggota pertama</button></div>'; return; }
-  if (V === 'tree') {
-    const old = $('.scroll'), sl = old ? old.scrollLeft : 0, st = old ? old.scrollTop : 0;
-    const seen = new Set();
-    const roots = D.filter(p => !p.ayah_id && !p.ibu_id && !unit(p).some(x => x.ayah_id || x.ibu_id)).sort(ord);
-    const foc = FOCUS && by(FOCUS);
-    const bar = foc ? `<span style="align-self:center;font-size:13px">Cabang <b>${esc(foc.nama)}</b></span><button class="btn sm" onclick="setFocus('')">Tampilkan semua</button>` : '';
-    app.innerHTML = '<div class="tb">' + bar + '<button class="btn o sm" onclick="colAll(true)">Ciutkan semua</button><button class="btn o sm" onclick="colAll(false)">Buka semua</button></div><div class="scroll"><div class="tree"><ul>' + (foc ? node(foc, seen) : roots.map(r => seen.has(r.id) ? '' : node(headOf(unit(r)), seen)).join('')) + '</ul></div></div>';
-    document.body.classList.add('tv'); zc.hidden = false;
-    alignLines();   // ukur garis pada skala 1, baru terapkan zoom
-    sizeScroll();
-    if (Z) { const sc = $('.scroll'); $('.tree').style.zoom = Z; sc.scrollLeft = sl; sc.scrollTop = st; zl(); } else fit(true);
-  } else {
-    app.innerHTML = '<input class="q" id="q" type="search" placeholder="Cari nama…" oninput="renderList()"><div class="grid" id="gl"></div>';
-    renderList();
-  }
+  renderList();
+  if (!D.length) { app.innerHTML = '<div class="empty"><p>Belum ada anggota keluarga.</p><button class="btn" onclick="openForm()">Tambah anggota pertama</button></div>'; sizeScroll(); return; }
+  const old = $('.scroll'), sl = old ? old.scrollLeft : 0, st = old ? old.scrollTop : 0;
+  const seen = new Set();
+  const ped = PED && by(PED), foc = !ped && FOCUS && by(FOCUS);
+  const roots = D.filter(p => !p.ayah_id && !p.ibu_id && !unit(p).some(x => x.ayah_id || x.ibu_id)).sort(ord);
+  const bar = ped ? `<span style="align-self:center;font-size:13px">Silsilah <b>${esc(ped.nama)}</b></span><button class="btn sm" onclick="showPed('')">Pohon besar</button>`
+    : foc ? `<span style="align-self:center;font-size:13px">Cabang <b>${esc(foc.nama)}</b></span><button class="btn sm" onclick="setFocus('')">Tampilkan semua</button>` : '';
+  const body = ped ? pedBody(PED, seen) : foc ? node(foc, seen) : roots.map(r => seen.has(r.id) ? '' : node(headOf(unit(r)), seen)).join('');
+  app.innerHTML = '<div class="tb">' + bar + '<button class="btn o sm" onclick="colAll(true)">Ciutkan semua</button><button class="btn o sm" onclick="colAll(false)">Buka semua</button></div><div class="scroll"><div class="tree"><ul>' + body + '</ul>' + (ped ? '<svg class="pl"></svg>' : '') + '</div></div>';
+  document.body.classList.add('tv'); zc.hidden = false;
+  alignLines(); drawPed();   // ukur garis pada skala 1, baru terapkan zoom
+  sizeScroll();
+  const me = ped && $(`.tree .c[data-pid="${PED}"]:not(.ref)`);
+  if (me) me.classList.add('me');
+  if (Z) { const sc = $('.scroll'); $('.tree').style.zoom = Z; sc.scrollLeft = sl; sc.scrollTop = st; zl(); } else { fit(true); if (me) centerOn(me); }
 }
-function renderList() {
-  const q = ($('#q').value || '').toLowerCase();
+function renderList() {   // daftar di panel kanan, bisa digulir
+  const q = ($('#q').value || '').toLowerCase().trim();
   const l = D.filter(p => p.nama.toLowerCase().includes(q)).sort((a, b) => a.nama.localeCompare(b.nama));
-  $('#gl').innerHTML = l.length ? l.map(p => card(p)).join('') : '<div class="empty w">Tidak ada nama yang cocok.</div>';
+  $('#sc').textContent = l.length + (q ? ' / ' + D.length : '');
+  $('#gl').innerHTML = l.length ? l.map(p => {
+    const y = [p.lahir, p.wafat].filter(Boolean).join(' – '), f = by(p.ayah_id) || by(p.ibu_id), g = p.gender === 'P' ? '♀' : '♂';
+    const av = p.foto ? `<img class="av" src="${esc(p.foto)}" alt="" onerror="this.outerHTML='<div class=&quot;av&quot;>${g}</div>'">` : `<div class="av">${g}</div>`;
+    const sub = [f ? (p.gender === 'P' ? 'binti ' : 'bin ') + f.nama : '', y].filter(Boolean).join(' · ');
+    return `<button class="row ${p.gender}${p.id === PED ? ' on' : ''}" onclick="detail('${p.id}')">${av}<span><b>${esc(p.nama)}</b><small>${esc(sub)}</small></span></button>`;
+  }).join('') : '<div class="empty">Tidak ada nama yang cocok.</div>';
 }
-function view(v) { V = v; $('#t1').classList.toggle('on', v === 'tree'); $('#t2').classList.toggle('on', v === 'list'); render(); }
+function view() {}   // tab Daftar kini berupa panel di kanan
 
 /* ---------- Detail ---------- */
 function detail(id) {
+  if (innerWidth < 820) $('#side').classList.remove('open');
   const p = by(id), f = by(p.ayah_id), m = by(p.ibu_id), s = spouses(p);
   const anak = D.filter(k => k.ayah_id === id || k.ibu_id === id).sort(ord);
   const row = (a, b) => b ? `<p style="margin:4px 0"><span style="color:var(--mute)">${a}:</span> ${esc(b)}</p>` : '';
   Swal.fire({
     title: esc(p.nama), showConfirmButton: false, showCloseButton: true,
     html: `<div style="text-align:left">${row('Jenis kelamin', p.gender === 'P' ? 'Perempuan' : 'Laki-laki')}${row('Lahir', p.lahir)}${row('Wafat', p.wafat)}${row('Ayah', f && f.nama)}${row('Ibu', m && m.nama)}${row('Pasangan', s.map(x => x.nama).join(', '))}${row('Anak', anak.map(k => k.nama).join(', '))}${row('Catatan', p.catatan)}</div>
-    <div class="acts"><button class="btn" onclick="Swal.close();edit('${id}')">Ubah</button><button class="btn o" onclick="Swal.close();addChild('${id}')">Tambah anak</button>${split(p.pasangan_id).length > 1 || anak.length > 1 ? `<button class="btn o" onclick="Swal.close();orderDlg('${id}')">Atur urutan</button>` : ''}<button class="btn o" onclick="Swal.close();goto('${id}')">Lihat di pohon</button>${anak.length ? `<button class="btn o" onclick="Swal.close();setFocus('${id}')">Lihat cabang ini</button>` : ''}<button class="btn r" onclick="Swal.close();del('${id}')">Hapus</button></div>`
+    <div class="acts"><button class="btn" onclick="Swal.close();showPed('${id}')">Lihat pohon</button><button class="btn o" onclick="Swal.close();edit('${id}')">Ubah</button><button class="btn o" onclick="Swal.close();addChild('${id}')">Tambah anak</button>${split(p.pasangan_id).length > 1 || anak.length > 1 ? `<button class="btn o" onclick="Swal.close();orderDlg('${id}')">Atur urutan</button>` : ''}<button class="btn o" onclick="Swal.close();goto('${id}')">Posisi di pohon besar</button>${anak.length ? `<button class="btn o" onclick="Swal.close();setFocus('${id}')">Lihat cabang ini</button>` : ''}<button class="btn r" onclick="Swal.close();del('${id}')">Hapus</button></div>`
   });
 }
 const edit = id => openForm(by(id));

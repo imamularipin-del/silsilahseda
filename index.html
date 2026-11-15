@@ -93,6 +93,8 @@ input.q{width:100%;max-width:420px;margin-bottom:16px;padding:10px 14px;border-r
   .pg{break-after:page;page-break-after:always}
   .pg:last-child{break-after:auto;page-break-after:auto}
 }
+.cp>.h{align-self:stretch;height:auto;display:flex;align-items:center;justify-content:center}
+.cp.hk>.h::after{content:"";position:absolute;left:calc(50% - 1px);top:calc(50% + 9px);bottom:0;border-left:2px solid var(--line)}
 .acts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
 .swal2-popup{font-family:Inter,system-ui,sans-serif}
 </style>
@@ -167,10 +169,10 @@ async function api(action, person) {
 }
 
 /* ---------- Tampilan ---------- */
-function card(p, note) {
+function card(p, note, e) {
   const y = [p.lahir, p.wafat].filter(Boolean).join(' – ');
   const av = p.foto ? `<img class="av" src="${esc(p.foto)}" alt="" onerror="this.outerHTML='<div class=&quot;av&quot;>${p.gender === 'P' ? '♀' : '♂'}</div>'">` : `<div class="av">${p.gender === 'P' ? '♀' : '♂'}</div>`;
-  return `<div class="c ${p.gender}" tabindex="0" role="button" onclick="detail('${p.id}')" onkeydown="if(event.key==='Enter')detail('${p.id}')">${av}<b>${esc(p.nama)}</b><small>${esc(y)}</small>${note ? `<small><i>${esc(note)}</i></small>` : ''}</div>`;
+  return `<div class="c ${p.gender}"${e ? ' data-e' : ''} tabindex="0" role="button" onclick="detail('${p.id}')" onkeydown="if(event.key==='Enter')detail('${p.id}')">${av}<b>${esc(p.nama)}</b><small>${esc(y)}</small>${note ? `<small><i>${esc(note)}</i></small>` : ''}</div>`;
 }
 
 function unit(p) {  // semua pasangan yang saling terhubung (suami + beberapa istri)
@@ -181,7 +183,7 @@ function unit(p) {  // semua pasangan yang saling terhubung (suami + beberapa is
 
 function node(p, seen, o) {   // o (opsional): batas generasi untuk cetak {d, max, cur, pages}
   const comp = unit(p);
-  const head = headOf(comp);
+  const head = p;   // keturunan yang digambar; garis induk selalu masuk ke kartunya
   const sp = spouses(head);
   const others = [...sp, ...comp.filter(x => x !== head && !sp.includes(x))];
   comp.forEach(x => seen.add(x.id));
@@ -194,11 +196,11 @@ function node(p, seen, o) {   // o (opsional): batas generasi untuk cetak {d, ma
   // satu pasangan: pasangan berdampingan, anak di bawahnya
   if (others.length < 2) {
     const kids = D.filter(k => (ids.includes(k.ayah_id) || ids.includes(k.ibu_id)) && !seen.has(k.id)).sort(ord);
-    return `<li><div class="cp">${[head, ...others].map((x, i) => (i ? '<span class="h"><i>♥</i></span>' : '') + card(x)).join('')}${tgl(head.id, kids)}</div>${ul(kids, head.id)}</li>`;
+    return `<li><div class="cp${kids.length ? ' hk' : ''}">${[head, ...others].map((x, i) => (i ? '<span class="h"><i>♥</i></span>' : '') + card(x, '', x === head)).join('')}${tgl(head.id, kids)}</div>${ul(kids, head.id)}</li>`;
   }
 
   // beberapa pasangan: suami di kiri, istri berurutan ke kanan, anak digantung di bawah ibunya masing-masing
-  const col = (x, ks, first) => `<div class="wc${x === head ? ' head' : ''}">${first ? '' : '<span class="hh">♥</span>'}<div class="cw">${card(x)}${tgl(x.id, ks)}</div>${ul(ks, x.id)}</div>`;
+  const col = (x, ks, first) => `<div class="wc${x === head ? ' head' : ''}">${first ? '' : '<span class="hh">♥</span>'}<div class="cw">${card(x, '', x === head)}${tgl(x.id, ks)}</div>${ul(ks, x.id)}</div>`;
   const taken = new Set();   // setiap anak hanya muncul di satu kolom
   const kidsOf = w => { const r = D.filter(k => (k.ayah_id === w.id || k.ibu_id === w.id) && !seen.has(k.id) && !taken.has(k.id)).sort(ord); r.forEach(k => taken.add(k.id)); return r; };
   const rest = others.map(w => [w, kidsOf(w)]);
@@ -207,15 +209,15 @@ function node(p, seen, o) {   // o (opsional): batas generasi untuk cetak {d, ma
   return `<li><div class="fam">${cols.map(([x, ks], i) => col(x, ks, i === 0)).join('')}</div></li>`;
 }
 
-function alignLines() {  // sambungkan garis induk tepat ke kartu kepala keluarga
+function alignLines() {  // garis induk selalu tersambung ke kartu keturunan; jarak garis seragam
   document.querySelectorAll('.tree li').forEach(li => {
-    const hd = li.querySelector(':scope > .fam > .wc.head');
-    if (!hd) return;
-    const lr = li.getBoundingClientRect(), r = hd.getBoundingClientRect();
+    const e = li.querySelector(':scope > .cp > .c[data-e], :scope > .fam > .wc.head > .cw > .c[data-e]');
+    if (!e) return;
+    const lr = li.getBoundingClientRect(), r = e.getBoundingClientRect();
     const cx = r.left - lr.left + r.width / 2;
     li.style.setProperty('--cx', cx + 'px');
     const top = li.parentElement.parentElement.classList.contains('tree');
-    if (!top && li.matches(':only-child') && Math.abs(cx - lr.width / 2) > 2) {
+    if (!top && li.matches(':only-child')) {
       const m = lr.width / 2;
       li.classList.add('jog');
       li.style.setProperty('--a', Math.min(cx, m) + 'px');
@@ -294,7 +296,7 @@ function render() {
     const old = $('.scroll'), sl = old ? old.scrollLeft : 0, st = old ? old.scrollTop : 0;
     const seen = new Set();
     const roots = D.filter(p => !p.ayah_id && !p.ibu_id && !unit(p).some(x => x.ayah_id || x.ibu_id)).sort(ord);
-    app.innerHTML = '<div class="tb"><button class="btn o sm" onclick="colAll(true)">Ciutkan semua</button><button class="btn o sm" onclick="colAll(false)">Buka semua</button></div><div class="scroll"><div class="tree"><ul>' + roots.map(r => seen.has(r.id) ? '' : node(r, seen)).join('') + '</ul></div></div>';
+    app.innerHTML = '<div class="tb"><button class="btn o sm" onclick="colAll(true)">Ciutkan semua</button><button class="btn o sm" onclick="colAll(false)">Buka semua</button></div><div class="scroll"><div class="tree"><ul>' + roots.map(r => seen.has(r.id) ? '' : node(headOf(unit(r)), seen)).join('') + '</ul></div></div>';
     document.body.classList.add('tv'); zc.hidden = false;
     alignLines();   // ukur garis pada skala 1, baru terapkan zoom
     sizeScroll();
@@ -391,14 +393,15 @@ async function orderDlg(id) {
   const sp = split(p.pasangan_id).map(by).filter(Boolean);
   const kd = D.filter(k => k.ayah_id === id || k.ibu_id === id).sort(ord);
   const list = (t, arr, cls) => arr.length < 2 ? '' : `<div style="text-align:left;font-weight:600;margin-top:6px">${t}</div><ul class="ord ${cls}">${arr.map(x => `<li data-id="${x.id}"><span>${esc(x.nama)}</span><span><button type="button" onclick="mv(this,-1)" aria-label="Naik">▲</button><button type="button" onclick="mv(this,1)" aria-label="Turun">▼</button></span></li>`).join('')}</ul>`;
-  const r = await Swal.fire({title:'Atur urutan', html:list('Urutan pasangan (kiri ke kanan)', sp, 'sp') + list('Urutan anak (kiri ke kanan)', kd, 'kd'), showCancelButton:true, confirmButtonText:'Simpan urutan', cancelButtonText:'Batal'});
+  const g = c => [...document.querySelectorAll('.ord.' + c + ' li')].map(l => l.dataset.id);
+  const r = await Swal.fire({title:'Atur urutan', html:list('Urutan pasangan (kiri ke kanan)', sp, 'sp') + list('Urutan anak (kiri ke kanan)', kd, 'kd'), showCancelButton:true, confirmButtonText:'Simpan urutan', cancelButtonText:'Batal',
+    preConfirm: () => ({sp: g('sp'), kd: g('kd')})});   // dibaca selagi dialog masih terbuka
   if (!r.isConfirmed || !(await needKey())) return;
-  const ids = c => [...document.querySelectorAll('.ord.' + c + ' li')].map(l => l.dataset.id);
-  const items = [];
-  busy('Menyimpan urutan…');
-  const s = sp.length > 1 ? ids('sp') : [];
+  const {sp: s, kd: ks} = r.value, items = [];
   if (s.length) items.push({id, pasangan_id: s.concat(split(p.pasangan_id).filter(x => !s.includes(x))).join(',')});
-  (kd.length > 1 ? ids('kd') : []).forEach((kid, i) => items.push({id: kid, urutan: String(i + 1)}));
+  ks.forEach((kid, i) => items.push({id: kid, urutan: String(i + 1)}));
+  if (!items.length) return;
+  busy('Menyimpan urutan…');
   try { await api('bulk', items); await load(true); Swal.close(); toast('success', 'Urutan berhasil disimpan'); }
   catch (e) { Swal.fire('Gagal menyimpan urutan', e.message, 'error'); }
 }

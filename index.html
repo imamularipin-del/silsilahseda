@@ -98,6 +98,7 @@ input.q{width:100%;max-width:420px;margin-bottom:16px;padding:10px 14px;border-r
 .c.ref{border-style:dashed}
 .tree>ul>li::before,.tree>ul>li::after{display:none!important}
 .tree>ul{gap:56px;align-items:flex-start}
+.c.flash{outline:3px solid #f59e0b;outline-offset:3px}
 .acts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
 .swal2-popup{font-family:Inter,system-ui,sans-serif}
 </style>
@@ -175,7 +176,7 @@ async function api(action, person) {
 function card(p, note, e, ref) {
   const y = [p.lahir, p.wafat].filter(Boolean).join(' – ');
   const av = p.foto ? `<img class="av" src="${esc(p.foto)}" alt="" onerror="this.outerHTML='<div class=&quot;av&quot;>${p.gender === 'P' ? '♀' : '♂'}</div>'">` : `<div class="av">${p.gender === 'P' ? '♀' : '♂'}</div>`;
-  return `<div class="c ${p.gender}${ref ? ' ref' : ''}"${e ? ' data-e' : ''} tabindex="0" role="button" onclick="detail('${p.id}')" onkeydown="if(event.key==='Enter')detail('${p.id}')">${av}<b>${esc(p.nama)}</b><small>${esc(y)}</small>${note ? `<small><i>${esc(note)}</i></small>` : ''}</div>`;
+  return `<div class="c ${p.gender}${ref ? ' ref' : ''}" data-pid="${p.id}"${e ? ' data-e' : ''} tabindex="0" role="button" onclick="detail('${p.id}')" onkeydown="if(event.key==='Enter')detail('${p.id}')">${av}<b>${esc(p.nama)}</b><small>${esc(y)}</small>${note ? `<small><i>${esc(note)}</i></small>` : ''}</div>`;
 }
 
 const isRef = x => !!(x.ayah_id || x.ibu_id);   // punya orang tua tercatat: ia digambar di cabang orang tuanya
@@ -197,25 +198,29 @@ function node(p, seen, o) {   // o (opsional): batas generasi untuk cetak {d, ma
   const mineIds = comp.filter(x => x === p || !isRef(x)).map(x => x.id);   // yang digambar di cabang ini
   mineIds.forEach(id => seen.add(id));                                        // pasangan referensi tidak ditandai
   const mine = k => mineIds.includes(k.ayah_id) || mineIds.includes(k.ibu_id);
+  const homeOf = k => by(k.ayah_id) || by(k.ibu_id);                    // rumah anak: garis ayah (jika tak ada, ibu)
+  const isHome = k => { const f = homeOf(k); return !!f && mineIds.includes(f.id); };
+  const live = k => isHome(k) ? !seen.has(k.id) : true;                   // anak lintas-cabang selalu dicantumkan
+  const refKid = k => `<li><div class="cp">${card(k, '↗ cabang ' + homeOf(k).nama, true, true)}</div></li>`;
   const cd = x => (x !== p && isRef(x)) ? card(x, refNote(x), false, true) : card(x, '', x === head);
   let cutNo = 0;
   const cutTag = () => { if (!cutNo) { o.pages.push({root: p.id, from: o.cur}); cutNo = o.pages.length; } return `<div class="cont">↳ lanjut hlm. ${cutNo}</div>`; };
-  const ul = (ks, key) => !ks.length ? '' : (o && o.d >= o.max) ? cutTag() : (!o && COL.has(key)) ? '' : '<ul>' + ks.map(k => node(k, seen, o && {...o, d: o.d + 1})).join('') + '</ul>';
-  const tgl = (key, ks) => (o || !ks.length) ? '' : `<button class="tg" onclick="tog('${key}')" aria-label="${COL.has(key) ? 'Buka cabang' : 'Ciutkan cabang'}">${COL.has(key) ? '+' + descN(ks.map(k => k.id)) : '−'}</button>`;
+  const ul = (ks, key) => !ks.length ? '' : (o && o.d >= o.max) ? cutTag() : (!o && COL.has(key)) ? '' : '<ul>' + ks.map(k => isHome(k) ? node(k, seen, o && {...o, d: o.d + 1}) : refKid(k)).join('') + '</ul>';
+  const tgl = (key, ks) => (o || !ks.length) ? '' : `<button class="tg" onclick="tog('${key}')" aria-label="${COL.has(key) ? 'Buka cabang' : 'Ciutkan cabang'}">${COL.has(key) ? '+' + (descN(ks.filter(isHome).map(k => k.id)) + ks.filter(k => !isHome(k)).length) : '−'}</button>`;
 
   // satu pasangan: pasangan berdampingan, anak di bawahnya
   if (others.length < 2) {
-    const all = D.filter(mine), kids = all.filter(k => !seen.has(k.id)).sort(ord);
-    const away = all.length && !kids.length ? '<div class="cont">↳ anak ditampilkan di cabang pasangan</div>' : '';
+    const kids = D.filter(k => mine(k) && live(k)).sort(ord);
+    const away = '';
     return `<li><div class="cp${kids.length ? ' hk' : ''}">${[head, ...others].map((x, i) => (i ? '<span class="h"><i>♥</i></span>' : '') + cd(x)).join('')}${tgl(head.id, kids)}</div>${ul(kids, head.id)}${away}</li>`;
   }
 
   // beberapa pasangan: suami di kiri, istri berurutan ke kanan, anak digantung di bawah ibunya masing-masing
   const col = (x, ks, first, away) => `<div class="wc${x === head ? ' head' : ''}">${first ? '' : '<span class="hh">♥</span>'}<div class="cw">${cd(x)}${tgl(x.id, ks)}</div>${ul(ks, x.id)}${away ? '<div class="cont">↳ anak ditampilkan di cabang pasangan</div>' : ''}</div>`;
   const taken = new Set();   // setiap anak hanya muncul di satu kolom
-  const kidsOf = w => { const r = D.filter(k => (k.ayah_id === w.id || k.ibu_id === w.id) && mine(k) && !seen.has(k.id) && !taken.has(k.id)).sort(ord); r.forEach(k => taken.add(k.id)); return r; };
-  const rest = others.map(w => [w, kidsOf(w), D.some(k => (k.ayah_id === w.id || k.ibu_id === w.id) && mine(k) && seen.has(k.id))]);
-  const own = D.filter(k => mine(k) && !seen.has(k.id) && !taken.has(k.id)).sort(ord);
+  const kidsOf = w => { const r = D.filter(k => (k.ayah_id === w.id || k.ibu_id === w.id) && mine(k) && live(k) && !taken.has(k.id)).sort(ord); r.forEach(k => taken.add(k.id)); return r; };
+  const rest = others.map(w => [w, kidsOf(w), false]);
+  const own = D.filter(k => mine(k) && live(k) && !taken.has(k.id)).sort(ord);
   const cols = [[head, own, false], ...rest];
   return `<li><div class="fam">${cols.map(([x, ks, aw], i) => col(x, ks, i === 0, aw)).join('')}</div></li>`;
 }
@@ -236,6 +241,7 @@ function alignLines() {  // garis induk selalu tersambung ke kartu keturunan; ja
     }
   });
 }
+let FOCUS = '';   // id leluhur bila sedang melihat satu cabang
 let Z = 0;   // skala pohon (0 = belum diatur)
 let COL = new Set(); try { COL = new Set(JSON.parse(localStorage.getItem('col') || '[]')); } catch (e) {}
 const saveCol = () => { try { localStorage.setItem('col', JSON.stringify([...COL])); } catch (e) {} };
@@ -244,6 +250,18 @@ function descN(ids) {   // jumlah keturunan (termasuk anak langsung)
   const seen = new Set(ids), q = [...ids];
   while (q.length) { const x = q.pop(); D.forEach(k => { if ((k.ayah_id === x || k.ibu_id === x) && !seen.has(k.id)) { seen.add(k.id); q.push(k.id); } }); }
   return seen.size;
+}
+function setFocus(id) { FOCUS = id; Z = 0; render(); }
+function goto(id) {   // pindah ke kartu asli seseorang di pohon dan beri sorotan
+  if (V !== 'tree') view('tree');
+  const find = () => document.querySelector(`.tree .c[data-pid="${id}"]:not(.ref)`);
+  let el = find();
+  if (!el && (FOCUS || COL.size)) { FOCUS = ''; COL.clear(); saveCol(); Z = 0; render(); el = find(); }
+  if (!el) return toast('info', 'Tidak ditemukan di pohon');
+  const sc = $('.scroll'), r = el.getBoundingClientRect(), s = sc.getBoundingClientRect();
+  sc.scrollLeft += r.left - s.left - (sc.clientWidth - r.width) / 2;
+  sc.scrollTop += r.top - s.top - (sc.clientHeight - r.height) / 2;
+  el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 2200);
 }
 function tog(key) { COL.has(key) ? COL.delete(key) : COL.add(key); saveCol(); render(); }
 function colAll(on) {
@@ -307,7 +325,9 @@ function render() {
     const old = $('.scroll'), sl = old ? old.scrollLeft : 0, st = old ? old.scrollTop : 0;
     const seen = new Set();
     const roots = D.filter(p => !p.ayah_id && !p.ibu_id && !unit(p).some(x => x.ayah_id || x.ibu_id)).sort(ord);
-    app.innerHTML = '<div class="tb"><button class="btn o sm" onclick="colAll(true)">Ciutkan semua</button><button class="btn o sm" onclick="colAll(false)">Buka semua</button></div><div class="scroll"><div class="tree"><ul>' + roots.map(r => seen.has(r.id) ? '' : node(headOf(unit(r)), seen)).join('') + '</ul></div></div>';
+    const foc = FOCUS && by(FOCUS);
+    const bar = foc ? `<span style="align-self:center;font-size:13px">Cabang <b>${esc(foc.nama)}</b></span><button class="btn sm" onclick="setFocus('')">Tampilkan semua</button>` : '';
+    app.innerHTML = '<div class="tb">' + bar + '<button class="btn o sm" onclick="colAll(true)">Ciutkan semua</button><button class="btn o sm" onclick="colAll(false)">Buka semua</button></div><div class="scroll"><div class="tree"><ul>' + (foc ? node(foc, seen) : roots.map(r => seen.has(r.id) ? '' : node(headOf(unit(r)), seen)).join('')) + '</ul></div></div>';
     document.body.classList.add('tv'); zc.hidden = false;
     alignLines();   // ukur garis pada skala 1, baru terapkan zoom
     sizeScroll();
@@ -332,7 +352,7 @@ function detail(id) {
   Swal.fire({
     title: esc(p.nama), showConfirmButton: false, showCloseButton: true,
     html: `<div style="text-align:left">${row('Jenis kelamin', p.gender === 'P' ? 'Perempuan' : 'Laki-laki')}${row('Lahir', p.lahir)}${row('Wafat', p.wafat)}${row('Ayah', f && f.nama)}${row('Ibu', m && m.nama)}${row('Pasangan', s.map(x => x.nama).join(', '))}${row('Anak', anak.map(k => k.nama).join(', '))}${row('Catatan', p.catatan)}</div>
-    <div class="acts"><button class="btn" onclick="Swal.close();edit('${id}')">Ubah</button><button class="btn o" onclick="Swal.close();addChild('${id}')">Tambah anak</button>${split(p.pasangan_id).length > 1 || anak.length > 1 ? `<button class="btn o" onclick="Swal.close();orderDlg('${id}')">Atur urutan</button>` : ''}<button class="btn r" onclick="Swal.close();del('${id}')">Hapus</button></div>`
+    <div class="acts"><button class="btn" onclick="Swal.close();edit('${id}')">Ubah</button><button class="btn o" onclick="Swal.close();addChild('${id}')">Tambah anak</button>${split(p.pasangan_id).length > 1 || anak.length > 1 ? `<button class="btn o" onclick="Swal.close();orderDlg('${id}')">Atur urutan</button>` : ''}<button class="btn o" onclick="Swal.close();goto('${id}')">Lihat di pohon</button>${anak.length ? `<button class="btn o" onclick="Swal.close();setFocus('${id}')">Lihat cabang ini</button>` : ''}<button class="btn r" onclick="Swal.close();del('${id}')">Hapus</button></div>`
   });
 }
 const edit = id => openForm(by(id));
